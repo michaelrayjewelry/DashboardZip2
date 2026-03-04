@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { C, SERIF, SANS, MONO, R, RS } from "./shared";
 import { chatWithClaudeJSON, generateImage } from "../lib/api";
+import {
+  createProject, updateProject, saveChatHistory,
+  saveGeneratedImageToProject, uploadFileToProject,
+} from "../lib/storage";
 
 // ─── SYSTEM PROMPT ───
 const SYSTEM_PROMPT = `You are the ZipJeweler AI Design Consultant — a master jeweler's creative partner embedded inside ZipJeweler, a SaaS platform for custom jewelry production workflow.
@@ -247,7 +251,7 @@ function ReadinessMeter({ value }) {
 }
 
 // ─── PROJECT PANEL ───
-function ProjectPanel({ project, readiness, suggestedTool }) {
+function ProjectPanel({ project, readiness, suggestedTool, projectId }) {
   const filledFields = Object.entries(project).filter(([_, v]) => v);
   const totalFields = Object.keys(EMPTY_PROJECT).length;
   const [genState, setGenState] = useState({ loading: false, error: null, imageUrl: null });
@@ -277,7 +281,12 @@ function ProjectPanel({ project, readiness, suggestedTool }) {
         resolution: "2K",
       });
       if (result.images?.length) {
-        setGenState({ loading: false, error: null, imageUrl: result.images[0].url });
+        const url = result.images[0].url;
+        setGenState({ loading: false, error: null, imageUrl: url });
+        // Save to project storage
+        if (projectId) {
+          saveGeneratedImageToProject(projectId, url, `imagine-${style}`, buildProjectPrompt(style));
+        }
       } else {
         setGenState({ loading: false, error: "No image returned", imageUrl: null });
       }
@@ -492,6 +501,7 @@ export default function ImagineView() {
   const [conversationHistory, setConversationHistory] = useState([]);
   const [started, setStarted] = useState(false);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [projectId, setProjectId] = useState(null);
 
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -499,10 +509,29 @@ export default function ImagineView() {
   useEffect(() => { setTimeout(() => setLoaded(true), 50); }, []);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isLoading]);
 
+  // Persist project fields whenever they change
+  useEffect(() => {
+    if (projectId) {
+      updateProject(projectId, { fields: project, readiness });
+    }
+  }, [project, readiness, projectId]);
+
+  // Persist chat history whenever messages change
+  useEffect(() => {
+    if (projectId && conversationHistory.length > 0) {
+      saveChatHistory(projectId, conversationHistory);
+    }
+  }, [conversationHistory, projectId]);
+
   // ─── Start conversation ───
   const startConversation = useCallback(async () => {
     setStarted(true);
     setIsLoading(true);
+
+    // Create a persistent project
+    const newProject = createProject({ name: "Untitled Project" });
+    setProjectId(newProject.id);
+
     try {
       const startMsg = "Start the conversation. Greet me and ask what we're imagining today.";
       const parsed = await chatWithClaudeJSON({
@@ -570,6 +599,11 @@ export default function ImagineView() {
           });
           return next;
         });
+
+        // Update project name in storage when first captured
+        if (parsed.extracted.name && projectId) {
+          updateProject(projectId, { name: parsed.extracted.name, type: parsed.extracted.type || null });
+        }
       }
 
       if (parsed.projectReadiness !== undefined) {
@@ -738,7 +772,7 @@ export default function ImagineView() {
           animation: "slideIn 0.25s ease",
         }}>
           {started ? (
-            <ProjectPanel project={project} readiness={readiness} />
+            <ProjectPanel project={project} readiness={readiness} projectId={projectId} />
           ) : (
             <div style={{ padding: "40px 20px", textAlign: "center" }}>
               <div style={{ fontFamily: SANS, fontSize: 11, color: C.border, letterSpacing: 2, textTransform: "uppercase" }}>Project folder will<br />appear here</div>

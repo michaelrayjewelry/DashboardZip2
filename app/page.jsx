@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { C, SERIF, SANS, MONO, R, RS } from "./components/shared";
 import ProductsView from "./components/ProductsView";
 import OrdersView from "./components/OrdersView";
@@ -8,6 +8,20 @@ import ImagineView from "./components/ImagineView";
 import ProjectView from "./components/ProjectView";
 import NewProjectModal from "./components/NewProjectModal";
 import { generateImage } from "./lib/api";
+import { getProjects } from "./lib/storage";
+
+// ─── Helpers ───
+function timeAgo(dateStr) {
+  if (!dateStr) return "";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
 
 // ─── Mock Data ───
 const PRIMARY_ACTIONS = [
@@ -786,7 +800,7 @@ function ImagineIcon({ color = C.sidebarText }) {
 }
 
 // ─── Dashboard Content ───
-function DashboardContent({ onNavigate, onOpenTool }) {
+function DashboardContent({ onNavigate, onOpenTool, storedProjects = [] }) {
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return "Good morning";
@@ -989,6 +1003,20 @@ function DashboardContent({ onNavigate, onOpenTool }) {
             </span>
           }
         >
+          {storedProjects.slice(0, 3).map((p) => (
+            <ProjectRow
+              key={p.id}
+              project={{
+                id: p.id,
+                name: p.name || "Untitled Project",
+                collection: p.fields?.collection || p.type || "Custom",
+                status: p.status || "draft",
+                stage: p.stage || "Concept",
+                time: timeAgo(p.updatedAt),
+              }}
+              onClick={() => onNavigate("project-detail", p.id)}
+            />
+          ))}
           {PROJECTS.map((p) => (
             <ProjectRow key={p.id} project={p} onClick={() => onNavigate("project-detail")} />
           ))}
@@ -1062,8 +1090,22 @@ function DashboardContent({ onNavigate, onOpenTool }) {
 export default function ZipJewelerDashboard() {
   const [activeNav, setActiveNav] = useState("dashboard");
   const [activeTool, setActiveTool] = useState(null);
+  const [storedProjects, setStoredProjects] = useState([]);
+  const [selectedProjectId, setSelectedProjectId] = useState(null);
 
-  const handleNavigate = (target) => {
+  // Load projects from storage on mount and when returning to dashboard/projects
+  const refreshProjects = useCallback(() => {
+    setStoredProjects(getProjects());
+  }, []);
+
+  useEffect(() => {
+    refreshProjects();
+  }, [activeNav, refreshProjects]);
+
+  const handleNavigate = (target, projectId) => {
+    if (target === "project-detail" && projectId) {
+      setSelectedProjectId(projectId);
+    }
     setActiveNav(target);
     setActiveTool(null);
   };
@@ -1187,7 +1229,7 @@ export default function ZipJewelerDashboard() {
         }}
       >
         {activeNav === "dashboard" && (
-          <DashboardContent onNavigate={handleNavigate} onOpenTool={setActiveTool} />
+          <DashboardContent onNavigate={handleNavigate} onOpenTool={setActiveTool} storedProjects={storedProjects} />
         )}
         {activeNav === "projects" && (
           <>
@@ -1217,7 +1259,25 @@ export default function ZipJewelerDashboard() {
               </div>
             </header>
             <div style={{ padding: "28px 44px 60px", maxWidth: 1080 }}>
-              <Section label="All Projects" style={{ padding: "24px 28px 28px" }}>
+              {storedProjects.length > 0 && (
+                <Section label="Your Projects" style={{ padding: "24px 28px 28px" }}>
+                  {storedProjects.map((p) => (
+                    <ProjectRow
+                      key={p.id}
+                      project={{
+                        id: p.id,
+                        name: p.name || "Untitled Project",
+                        collection: p.fields?.collection || p.type || "Custom",
+                        status: p.status || "draft",
+                        stage: p.stage || "Concept",
+                        time: timeAgo(p.updatedAt),
+                      }}
+                      onClick={() => handleNavigate("project-detail", p.id)}
+                    />
+                  ))}
+                </Section>
+              )}
+              <Section label="Sample Projects" style={{ padding: "24px 28px 28px" }}>
                 {PROJECTS.map((p) => (
                   <ProjectRow key={p.id} project={p} onClick={() => handleNavigate("project-detail")} />
                 ))}
@@ -1229,13 +1289,13 @@ export default function ZipJewelerDashboard() {
         {activeNav === "orders" && <OrdersView />}
         {activeNav === "imagine" && <ImagineView />}
         {activeNav === "project-detail" && (
-          <ProjectView onBack={() => handleNavigate("projects")} />
+          <ProjectView onBack={() => handleNavigate("projects")} projectId={selectedProjectId} />
         )}
       </main>
 
       {/* ═══ Tool Modal ═══ */}
       {activeTool?.id === "new-project" ? (
-        <NewProjectModal onClose={() => setActiveTool(null)} />
+        <NewProjectModal onClose={() => { setActiveTool(null); refreshProjects(); }} onProjectCreated={(id) => { refreshProjects(); handleNavigate("project-detail", id); }} />
       ) : (
         <ToolModal tool={activeTool} onClose={() => setActiveTool(null)} />
       )}

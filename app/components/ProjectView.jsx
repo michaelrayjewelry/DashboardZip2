@@ -1,5 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { C, SERIF, SANS, MONO, R, RS } from "./shared";
+import {
+  getProject, updateProject, getProjectFiles, getProjectFilesByCategory,
+  uploadFileToProject, getFileBlobURL, FILE_CATEGORIES,
+} from "../lib/storage";
 
 // ─── SHARED COMPONENTS ───
 
@@ -273,16 +277,79 @@ const TABS = [
   { key: "timeline", label: "Timeline" },
 ];
 
-export default function ProjectView({ onBack }) {
+export default function ProjectView({ onBack, projectId }) {
   const [activeTab, setActiveTab] = useState("overview");
   const [loaded, setLoaded] = useState(false);
   const [collapseState, setCollapse] = useState({});
+  const [projectFiles, setProjectFiles] = useState([]);
+  const [fileUrls, setFileUrls] = useState({}); // blobKey → objectURL
+  const uploadRef = useRef(null);
+  const [uploadContext, setUploadContext] = useState("reference"); // context for current upload
   const toggle = (k) => setCollapse((s) => ({ ...s, [k]: !s[k] }));
 
   useEffect(() => { setTimeout(() => setLoaded(true), 50); }, []);
 
-  // Mock project data
-  const project = {
+  // Load project data from storage
+  const storedProject = projectId ? getProject(projectId) : null;
+
+  // Load files from storage
+  useEffect(() => {
+    if (projectId) {
+      setProjectFiles(getProjectFiles(projectId));
+    }
+  }, [projectId]);
+
+  // Generate blob URLs for uploaded files
+  useEffect(() => {
+    const loadUrls = async () => {
+      const urls = {};
+      for (const f of projectFiles) {
+        if (f.blobKey && !f.url) {
+          try {
+            const url = await getFileBlobURL(f.blobKey);
+            if (url) urls[f.blobKey] = url;
+          } catch { /* skip */ }
+        }
+      }
+      setFileUrls(urls);
+    };
+    if (projectFiles.length > 0) loadUrls();
+    return () => {
+      // Revoke URLs on cleanup
+      Object.values(fileUrls).forEach(URL.revokeObjectURL);
+    };
+  }, [projectFiles]);
+
+  const handleFileUpload = async (files, source) => {
+    if (!projectId) return;
+    for (const file of files) {
+      await uploadFileToProject(projectId, file, source);
+    }
+    setProjectFiles(getProjectFiles(projectId));
+  };
+
+  const triggerUpload = (source) => {
+    setUploadContext(source);
+    uploadRef.current?.click();
+  };
+
+  // Merge stored data with fallback mock data
+  const project = storedProject ? {
+    name: storedProject.name || "Untitled Project",
+    collection: storedProject.fields?.collection || "",
+    stage: storedProject.stage || "concept",
+    status: storedProject.status || "draft",
+    created: new Date(storedProject.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    updated: new Date(storedProject.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    client: {
+      email: storedProject.fields?.clientEmail || "—",
+      name: storedProject.fields?.clientName || "—",
+      phone: "—",
+      created: new Date(storedProject.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }),
+    },
+    fields: storedProject.fields || {},
+    readiness: storedProject.readiness || 0,
+  } : {
     name: "Crown of Thorns Ring",
     collection: "Mythos Line",
     stage: "cad",
@@ -290,10 +357,39 @@ export default function ProjectView({ onBack }) {
     created: "Feb 23, 2026",
     updated: "Mar 3, 2026",
     client: { email: "augm3ntllc@gmail.com", name: "Lord Augm3nt", phone: "—", created: "Feb 23, 2026, 12:36 PM" },
+    fields: {},
+    readiness: 0,
+  };
+
+  // Get files grouped by category
+  const filesByCategory = projectId ? getProjectFilesByCategory(projectId) : {};
+  const getFileUrl = (f) => f.url || (f.blobKey ? fileUrls[f.blobKey] : null);
+  const getFileTypeKey = (f) => {
+    const catMap = { reference: "image", sketch: "image", render: "image", marketing: "image", cad: "cad", model3d: "model", document: "doc", certificate: "cert", other: "doc" };
+    return catMap[f.category] || "doc";
+  };
+  const formatSize = (bytes) => {
+    if (!bytes) return "—";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1048576) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / 1048576).toFixed(1)} MB`;
   };
 
   return (
     <>
+      {/* Hidden file input for uploads */}
+      <input
+        ref={uploadRef}
+        type="file"
+        multiple
+        accept="image/*,.pdf,.step,.stp,.stl,.obj,.doc,.docx,.xlsx,.csv"
+        style={{ display: "none" }}
+        onChange={async (e) => {
+          const files = Array.from(e.target.files || []);
+          if (files.length > 0) await handleFileUpload(files, uploadContext);
+          e.target.value = "";
+        }}
+      />
       {/* ─── Header ─── */}
       <header style={{
         padding: "24px 44px", background: C.white,
@@ -325,7 +421,7 @@ export default function ProjectView({ onBack }) {
             }}>
               <option>In Progress</option><option>Draft</option><option>In Review</option><option>Complete</option>
             </select>
-            <SmallBtn label="Send Update Email" primary onClick={() => {}} />
+            <SmallBtn label="Send Update Email" primary onClick={() => void 0} />
           </div>
         </div>
         <PipelineBar current={project.stage} />
@@ -345,7 +441,7 @@ export default function ProjectView({ onBack }) {
         {activeTab === "overview" && (
           <>
             {/* Client Info */}
-            <Section label="Client" rightAction={<SmallBtn label="Edit Client" onClick={() => {}} />}>
+            <Section label="Client" rightAction={<SmallBtn label="Edit Client" onClick={() => void 0} />}>
               <div style={{ display: "flex", gap: 40, flexWrap: "wrap" }}>
                 <InfoField label="Email" value={project.client.email} />
                 <InfoField label="Name" value={project.client.name} />
@@ -370,10 +466,16 @@ export default function ProjectView({ onBack }) {
             </div>
 
             {/* Reference Images */}
-            <Section label="Reference Images" count={2} rightAction={<SmallBtn label="+ Upload" onClick={() => {}} />}>
+            <Section label="Reference Images" count={(filesByCategory.reference || []).length} rightAction={<SmallBtn label="+ Upload" onClick={() => triggerUpload("reference")} />}>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                <ImageSlot label="Reference 1" hasImage={false} />
-                <ImageSlot label="Reference 2" hasImage={false} />
+                {(filesByCategory.reference || []).map((f) => {
+                  const url = getFileUrl(f);
+                  return <ImageSlot key={f.id} label={f.name} hasImage={!!url} src={url} />;
+                })}
+                {(filesByCategory.render || []).map((f) => {
+                  const url = getFileUrl(f);
+                  return <ImageSlot key={f.id} label={f.name} hasImage={!!url} src={url} />;
+                })}
                 <ImageSlot label="Add Image" hasImage={false} />
               </div>
             </Section>
@@ -393,7 +495,7 @@ export default function ProjectView({ onBack }) {
         {/* ════════════════════════════════════════ */}
         {activeTab === "design" && (
           <>
-            <Section label="AI-Generated Concepts" count={4} rightAction={<SmallBtn label="+ Generate New" primary onClick={() => {}} />}>
+            <Section label="AI-Generated Concepts" count={4} rightAction={<SmallBtn label="+ Generate New" primary onClick={() => void 0} />}>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                 {[1, 2, 3, 4].map((n) => <ImageSlot key={n} label={`Concept ${n}`} />)}
                 <ImageSlot label="Generate" />
@@ -403,7 +505,7 @@ export default function ProjectView({ onBack }) {
               </div>
             </Section>
 
-            <Section label="Sketches & Drawings" count={2} rightAction={<SmallBtn label="+ Upload" onClick={() => {}} />}>
+            <Section label="Sketches & Drawings" count={(filesByCategory.sketch || []).length} rightAction={<SmallBtn label="+ Upload" onClick={() => triggerUpload("sketch")} />}>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                 <ImageSlot label="Sketch 1" />
                 <ImageSlot label="Sketch 2" />
@@ -411,14 +513,14 @@ export default function ProjectView({ onBack }) {
               </div>
             </Section>
 
-            <Section label="Photorealistic Renders" count={3} rightAction={<SmallBtn label="+ Render" primary onClick={() => {}} />}>
+            <Section label="Photorealistic Renders" count={3} rightAction={<SmallBtn label="+ Render" primary onClick={() => void 0} />}>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                 {["Front View", "Side View", "Detail"].map((v) => <ImageSlot key={v} label={v} />)}
                 <ImageSlot label="Add Render" />
               </div>
             </Section>
 
-            <Section label="Mood Board & References" count={0} rightAction={<SmallBtn label="+ Add" onClick={() => {}} />}>
+            <Section label="Mood Board & References" count={0} rightAction={<SmallBtn label="+ Add" onClick={() => void 0} />}>
               <div style={{ padding: "30px 0", textAlign: "center" }}>
                 <div style={{ fontFamily: SANS, fontSize: 12, color: C.light }}>Drag images here or click to add inspiration references</div>
               </div>
@@ -433,9 +535,9 @@ export default function ProjectView({ onBack }) {
           <>
             <Section label="General">
               <div style={{ display: "flex", flexWrap: "wrap", gap: "18px 32px" }}>
-                <Field label="Jewelry Type" value="Ring" />
-                <Field label="Name" value="Crown of Thorns" />
-                <Field label="Description" value="Crown of thorns design, literal depiction, literal thorn depiction, stylized thorn motif, detailed thorns, sharp thorns, crown of thorns, 14k yellow gold" wide textarea />
+                <Field label="Jewelry Type" value={project.fields.type || "Ring"} />
+                <Field label="Name" value={project.fields.name || project.name} />
+                <Field label="Description" value={project.fields.description || "Crown of thorns design, literal depiction, stylized thorn motif, detailed thorns, sharp thorns, crown of thorns, 14k yellow gold"} wide textarea />
               </div>
             </Section>
 
@@ -452,9 +554,9 @@ export default function ProjectView({ onBack }) {
 
             <Section label="Metal">
               <div style={{ display: "flex", flexWrap: "wrap", gap: "18px 32px" }}>
-                <Field label="Metal" value="Yellow Gold" />
-                <Field label="Metal Karat" value="14k" />
-                <Field label="Finish" value="High Polish" />
+                <Field label="Metal" value={project.fields.metal || "Yellow Gold"} />
+                <Field label="Metal Karat" value={project.fields.metalKarat || "14k"} />
+                <Field label="Finish" value={project.fields.finish || "High Polish"} />
                 <Field label="Plating" value="None" />
               </div>
             </Section>
@@ -544,13 +646,13 @@ export default function ProjectView({ onBack }) {
         {/* ════════════════════════════════════════ */}
         {activeTab === "manufacturing" && (
           <>
-            <Section label="CAD Files" count={3} rightAction={<SmallBtn label="+ Upload CAD" onClick={() => {}} />}>
+            <Section label="CAD Files" count={(filesByCategory.cad || []).length || 3} rightAction={<SmallBtn label="+ Upload CAD" onClick={() => triggerUpload("cad")} />}>
               <FileCard name="crown-thorns-v3.step" type="cad" size="4.2 MB" date="Mar 3, 2026" status="Current" />
               <FileCard name="crown-thorns-v2.step" type="cad" size="3.8 MB" date="Feb 28, 2026" />
               <FileCard name="crown-thorns-v1.step" type="cad" size="3.1 MB" date="Feb 25, 2026" />
             </Section>
 
-            <Section label="3D Models" count={2} rightAction={<SmallBtn label="+ Upload Model" onClick={() => {}} />}>
+            <Section label="3D Models" count={(filesByCategory.model3d || []).length || 2} rightAction={<SmallBtn label="+ Upload Model" onClick={() => triggerUpload("3d")} />}>
               <FileCard name="crown-thorns-render.stl" type="model" size="12.6 MB" date="Mar 2, 2026" status="Current" />
               <FileCard name="crown-thorns-print.stl" type="model" size="8.4 MB" date="Mar 1, 2026" />
             </Section>
@@ -596,7 +698,7 @@ export default function ProjectView({ onBack }) {
                   flex: 1, fontFamily: SANS, fontSize: 13, padding: "10px 14px", color: C.dark,
                   background: C.white, border: `1px solid ${C.border}`, borderRadius: RS, outline: "none",
                 }} />
-                <SmallBtn label="Send" primary onClick={() => {}} />
+                <SmallBtn label="Send" primary onClick={() => void 0} />
               </div>
             </Section>
 
@@ -626,19 +728,19 @@ export default function ProjectView({ onBack }) {
         {/* ════════════════════════════════════════ */}
         {activeTab === "documents" && (
           <>
-            <Section label="Invoices & Quotes" count={2} rightAction={<SmallBtn label="+ New Invoice" onClick={() => {}} />}>
+            <Section label="Invoices & Quotes" count={2} rightAction={<SmallBtn label="+ New Invoice" onClick={() => void 0} />}>
               <FileCard name="Quote-CrownThorns-001.pdf" type="pdf" size="124 KB" date="Feb 24, 2026" status="Current" />
               <FileCard name="Deposit-Invoice-001.pdf" type="pdf" size="98 KB" date="Feb 25, 2026" />
             </Section>
 
-            <Section label="Certificates & Grading" count={0} rightAction={<SmallBtn label="+ Upload" onClick={() => {}} />}>
+            <Section label="Certificates & Grading" count={0} rightAction={<SmallBtn label="+ Upload" onClick={() => void 0} />}>
               <div style={{ padding: "24px 0", textAlign: "center" }}>
                 <div style={{ fontFamily: SANS, fontSize: 12, color: C.light, marginBottom: 4 }}>No certificates uploaded</div>
                 <div style={{ fontFamily: SANS, fontSize: 11, color: C.light }}>Upload stone grading reports, metal assay certs, or appraisals</div>
               </div>
             </Section>
 
-            <Section label="Client Agreements" count={1} rightAction={<SmallBtn label="+ Upload" onClick={() => {}} />}>
+            <Section label="Client Agreements" count={1} rightAction={<SmallBtn label="+ Upload" onClick={() => void 0} />}>
               <FileCard name="Custom-Order-Agreement.pdf" type="doc" size="210 KB" date="Feb 23, 2026" />
             </Section>
 
@@ -651,15 +753,29 @@ export default function ProjectView({ onBack }) {
               </div>
             </Section>
 
-            <Section label="All Project Files" count={8} rightAction={<SmallBtn label="+ Upload" onClick={() => {}} />}>
-              <FileCard name="crown-thorns-v3.step" type="cad" size="4.2 MB" date="Mar 3" />
-              <FileCard name="crown-thorns-render.stl" type="model" size="12.6 MB" date="Mar 2" />
-              <FileCard name="render-front-v2.png" type="image" size="2.1 MB" date="Mar 1" />
-              <FileCard name="render-side-v2.png" type="image" size="1.8 MB" date="Mar 1" />
-              <FileCard name="concept-ai-001.png" type="image" size="890 KB" date="Feb 23" />
-              <FileCard name="Quote-CrownThorns-001.pdf" type="pdf" size="124 KB" date="Feb 24" />
-              <FileCard name="Custom-Order-Agreement.pdf" type="doc" size="210 KB" date="Feb 23" />
-              <FileCard name="client-reference-photo.jpg" type="image" size="1.4 MB" date="Feb 23" />
+            <Section label="All Project Files" count={projectFiles.length || 8} rightAction={<SmallBtn label="+ Upload" onClick={() => triggerUpload("other")} />}>
+              {projectFiles.length > 0 ? (
+                projectFiles.map((f) => (
+                  <FileCard
+                    key={f.id}
+                    name={f.name}
+                    type={getFileTypeKey(f)}
+                    size={formatSize(f.size)}
+                    date={new Date(f.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  />
+                ))
+              ) : (
+                <>
+                  <FileCard name="crown-thorns-v3.step" type="cad" size="4.2 MB" date="Mar 3" />
+                  <FileCard name="crown-thorns-render.stl" type="model" size="12.6 MB" date="Mar 2" />
+                  <FileCard name="render-front-v2.png" type="image" size="2.1 MB" date="Mar 1" />
+                  <FileCard name="render-side-v2.png" type="image" size="1.8 MB" date="Mar 1" />
+                  <FileCard name="concept-ai-001.png" type="image" size="890 KB" date="Feb 23" />
+                  <FileCard name="Quote-CrownThorns-001.pdf" type="pdf" size="124 KB" date="Feb 24" />
+                  <FileCard name="Custom-Order-Agreement.pdf" type="doc" size="210 KB" date="Feb 23" />
+                  <FileCard name="client-reference-photo.jpg" type="image" size="1.4 MB" date="Feb 23" />
+                </>
+              )}
             </Section>
           </>
         )}
