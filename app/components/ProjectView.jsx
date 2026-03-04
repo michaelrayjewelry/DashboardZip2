@@ -897,17 +897,25 @@ export default function ProjectView({ onBack, projectId }) {
             { label: "Budget", value: f.budget || "—" },
             { label: "Timeline", value: f.timeline || "—" },
           ];
-          // Gather all image files + generated images for gallery picker
+          // Gather ALL image files + generated images for gallery picker
           const allImages = [];
-          for (const cat of ["render", "reference", "sketch"]) {
+          const seenUrls = new Set();
+          const addImage = (entry) => {
+            if (entry.url && !seenUrls.has(entry.url)) { seenUrls.add(entry.url); allImages.push(entry); }
+          };
+          for (const cat of ["render", "reference", "sketch", "marketing", "other"]) {
             (filesByCategory[cat] || []).forEach((file) => {
               const url = getFileUrl(file);
-              if (url) allImages.push({ fileId: file.id, url, label: file.name });
+              if (url) addImage({ fileId: file.id, url, label: file.name });
             });
           }
           (storedGeneratedImages || []).forEach((img, i) => {
-            if (img.url) allImages.push({ fileId: null, url: img.url, label: `AI Concept ${i + 1}` });
+            addImage({ fileId: null, url: img.url, label: `AI Concept ${i + 1}` });
           });
+          // Include the just-generated image (may not be persisted to storage yet)
+          if (genState.imageUrl) {
+            addImage({ fileId: null, url: genState.imageUrl, label: "New Concept" });
+          }
           return (
             <>
               {/* ── Product Card ── */}
