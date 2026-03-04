@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { C, SERIF, SANS, MONO, R, RS, ANTHROPIC_KEY } from "./shared";
+import { C, SERIF, SANS, MONO, R, RS } from "./shared";
+import { chatWithClaudeJSON, generateImage } from "../lib/api";
+import {
+  createProject, updateProject, saveChatHistory,
+  saveGeneratedImageToProject, uploadFileToProject,
+} from "../lib/storage";
 
 // ─── SYSTEM PROMPT ───
 const SYSTEM_PROMPT = `You are the ZipJeweler AI Design Consultant — a master jeweler's creative partner embedded inside ZipJeweler, a SaaS platform for custom jewelry production workflow.
@@ -246,9 +251,49 @@ function ReadinessMeter({ value }) {
 }
 
 // ─── PROJECT PANEL ───
-function ProjectPanel({ project, readiness, suggestedTool }) {
+function ProjectPanel({ project, readiness, suggestedTool, projectId }) {
   const filledFields = Object.entries(project).filter(([_, v]) => v);
   const totalFields = Object.keys(EMPTY_PROJECT).length;
+  const [genState, setGenState] = useState({ loading: false, error: null, imageUrl: null });
+
+  const buildProjectPrompt = (style) => {
+    const parts = [];
+    if (style === "sketch") parts.push("Detailed pencil sketch concept drawing of custom jewelry");
+    else parts.push("Photorealistic studio product photograph of custom jewelry, white background, professional lighting");
+
+    if (project.type) parts.push(project.type);
+    if (project.description) parts.push(project.description);
+    if (project.metal) parts.push(`made of ${project.metal}`);
+    if (project.mainGemstone) parts.push(`featuring ${project.mainGemstone}`);
+    if (project.designMotif) parts.push(`${project.designMotif} design motif`);
+    if (project.finish) parts.push(`${project.finish} finish`);
+    if (project.settingType) parts.push(`${project.settingType} setting`);
+    if (project.sideStones) parts.push(`with ${project.sideStones}`);
+    return parts.join(", ");
+  };
+
+  const handleGenerateImage = async (style) => {
+    setGenState({ loading: true, error: null, imageUrl: null });
+    try {
+      const result = await generateImage({
+        prompt: buildProjectPrompt(style),
+        aspectRatio: "1:1",
+        resolution: "2K",
+      });
+      if (result.images?.length) {
+        const url = result.images[0].url;
+        setGenState({ loading: false, error: null, imageUrl: url });
+        // Save to project storage
+        if (projectId) {
+          saveGeneratedImageToProject(projectId, url, `imagine-${style}`, buildProjectPrompt(style));
+        }
+      } else {
+        setGenState({ loading: false, error: "No image returned", imageUrl: null });
+      }
+    } catch (err) {
+      setGenState({ loading: false, error: err.message, imageUrl: null });
+    }
+  };
 
   return (
     <div style={{
@@ -276,6 +321,31 @@ function ProjectPanel({ project, readiness, suggestedTool }) {
           {filledFields.length} / {totalFields} fields captured
         </div>
       </div>
+
+      {/* Generated Image */}
+      {(genState.loading || genState.imageUrl || genState.error) && (
+        <div style={{ marginBottom: 16, padding: "12px", background: C.section, borderRadius: R, border: `1px solid ${C.border}` }}>
+          <div style={{ fontFamily: SANS, fontSize: 9, fontWeight: 600, letterSpacing: 2.5, textTransform: "uppercase", color: C.label, marginBottom: 8 }}>AI Generated</div>
+          {genState.loading && (
+            <div style={{ padding: "24px 0", textAlign: "center" }}>
+              <div style={{
+                width: 24, height: 24, border: `2px solid ${C.border}`, borderTopColor: C.coral,
+                borderRadius: "50%", margin: "0 auto 10px",
+                animation: "spin 0.8s linear infinite",
+              }} />
+              <div style={{ fontFamily: SANS, fontSize: 10, color: C.light }}>Generating...</div>
+            </div>
+          )}
+          {genState.error && (
+            <div style={{ fontFamily: SANS, fontSize: 11, color: C.coral, padding: "8px 0" }}>{genState.error}</div>
+          )}
+          {genState.imageUrl && (
+            <a href={genState.imageUrl} target="_blank" rel="noopener noreferrer">
+              <img src={genState.imageUrl} alt="Generated jewelry" style={{ width: "100%", borderRadius: RS, border: `1px solid ${C.border}`, display: "block" }} />
+            </a>
+          )}
+        </div>
+      )}
 
       {/* Field groups */}
       {Object.entries(FIELD_GROUPS).map(([groupName, fields]) => {
@@ -329,19 +399,19 @@ function ProjectPanel({ project, readiness, suggestedTool }) {
           <div style={{ fontFamily: SANS, fontSize: 9, fontWeight: 600, letterSpacing: 2.5, textTransform: "uppercase", color: C.label, marginBottom: 12 }}>Quick Actions</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {readiness >= 40 && (
-              <ActionBtn icon="\u270F\uFE0F" label="Generate Sketch" desc="AI concept from current specs" />
+              <ActionBtn icon={"\u270F\uFE0F"} label="Generate Sketch" desc="AI concept from current specs" onClick={() => handleGenerateImage("sketch")} disabled={genState.loading} />
             )}
             {readiness >= 55 && (
-              <ActionBtn icon="\uD83D\uDDBC" label="Create Render" desc="Photorealistic visualization" />
+              <ActionBtn icon={"\uD83D\uDDBC"} label="Create Render" desc="Photorealistic visualization" onClick={() => handleGenerateImage("render")} disabled={genState.loading} />
             )}
             {readiness >= 50 && (
-              <ActionBtn icon="\uD83D\uDCB0" label="Cost Estimate" desc="Material & labor breakdown" />
+              <ActionBtn icon={"\uD83D\uDCB0"} label="Cost Estimate" desc="Material & labor breakdown" />
             )}
             {readiness >= 70 && (
-              <ActionBtn icon="\uD83E\uDDCA" label="Generate 3D Model" desc="Production-ready CAD file" />
+              <ActionBtn icon={"\uD83E\uDDCA"} label="Generate 3D Model" desc="Production-ready CAD file" />
             )}
             {readiness >= 80 && (
-              <ActionBtn icon="\uD83D\uDCC1" label="Create Project Folder" desc="Compile complete package" color={C.green} />
+              <ActionBtn icon={"\uD83D\uDCC1"} label="Create Project Folder" desc="Compile complete package" color={C.green} />
             )}
           </div>
         </div>
@@ -350,19 +420,25 @@ function ProjectPanel({ project, readiness, suggestedTool }) {
   );
 }
 
-function ActionBtn({ icon, label, desc, color }) {
+function ActionBtn({ icon, label, desc, color, onClick, disabled }) {
   const [h, setH] = useState(false);
   const c = color || C.blue;
   return (
-    <div onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{
-      display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
-      background: h ? C.white : "transparent", borderRadius: RS,
-      border: `1px solid ${h ? c : "transparent"}`,
-      cursor: "pointer", transition: "all 0.2s",
-    }}>
+    <div
+      onMouseEnter={() => setH(true)}
+      onMouseLeave={() => setH(false)}
+      onClick={disabled ? undefined : onClick}
+      style={{
+        display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
+        background: h && !disabled ? C.white : "transparent", borderRadius: RS,
+        border: `1px solid ${h && !disabled ? c : "transparent"}`,
+        cursor: disabled ? "default" : "pointer", transition: "all 0.2s",
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
       <span style={{ fontSize: 14 }}>{icon}</span>
       <div style={{ flex: 1 }}>
-        <div style={{ fontFamily: SANS, fontSize: 11, fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase", color: h ? c : C.mid }}>{label}</div>
+        <div style={{ fontFamily: SANS, fontSize: 11, fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase", color: h && !disabled ? c : C.mid }}>{label}</div>
         <div style={{ fontFamily: SANS, fontSize: 10.5, color: C.light }}>{desc}</div>
       </div>
     </div>
@@ -425,6 +501,7 @@ export default function ImagineView() {
   const [conversationHistory, setConversationHistory] = useState([]);
   const [started, setStarted] = useState(false);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [projectId, setProjectId] = useState(null);
 
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -432,34 +509,37 @@ export default function ImagineView() {
   useEffect(() => { setTimeout(() => setLoaded(true), 50); }, []);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isLoading]);
 
+  // Persist project fields whenever they change
+  useEffect(() => {
+    if (projectId) {
+      updateProject(projectId, { fields: project, readiness });
+    }
+  }, [project, readiness, projectId]);
+
+  // Persist chat history whenever messages change
+  useEffect(() => {
+    if (projectId && conversationHistory.length > 0) {
+      saveChatHistory(projectId, conversationHistory);
+    }
+  }, [conversationHistory, projectId]);
+
   // ─── Start conversation ───
   const startConversation = useCallback(async () => {
     setStarted(true);
     setIsLoading(true);
+
+    // Create a persistent project
+    const newProject = createProject({ name: "Untitled Project" });
+    setProjectId(newProject.id);
+
     try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": ANTHROPIC_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          system: SYSTEM_PROMPT,
-          messages: [{ role: "user", content: "Start the conversation. Greet me and ask what we're imagining today." }],
-        }),
+      const startMsg = "Start the conversation. Greet me and ask what we're imagining today.";
+      const parsed = await chatWithClaudeJSON({
+        system: SYSTEM_PROMPT,
+        messages: [{ role: "user", content: startMsg }],
+        maxTokens: 1000,
+        fallback: { extracted: {}, suggestedTool: null, projectReadiness: 0 },
       });
-      const data = await resp.json();
-      const text = data.content?.map((b) => b.text || "").join("") || "";
-      let parsed;
-      try {
-        parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-      } catch {
-        parsed = { message: text, extracted: {}, suggestedTool: null, projectReadiness: 0 };
-      }
 
       const aiMsg = {
         role: "assistant", content: parsed.message,
@@ -467,10 +547,11 @@ export default function ImagineView() {
       };
       setMessages([aiMsg]);
       setConversationHistory([
-        { role: "user", content: "Start the conversation. Greet me and ask what we're imagining today." },
-        { role: "assistant", content: text },
+        { role: "user", content: startMsg },
+        { role: "assistant", content: JSON.stringify(parsed) },
       ]);
     } catch (err) {
+      console.error("startConversation error:", err);
       setMessages([{ role: "assistant", content: "What are we imagining today?" }]);
       setConversationHistory([
         { role: "user", content: "Start the conversation." },
@@ -494,29 +575,12 @@ export default function ImagineView() {
     const newHistory = [...conversationHistory, { role: "user", content: text }];
 
     try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": ANTHROPIC_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          system: SYSTEM_PROMPT,
-          messages: newHistory,
-        }),
+      const parsed = await chatWithClaudeJSON({
+        system: SYSTEM_PROMPT,
+        messages: newHistory,
+        maxTokens: 1000,
+        fallback: { extracted: {}, suggestedTool: null, projectReadiness: readiness },
       });
-      const data = await resp.json();
-      const raw = data.content?.map((b) => b.text || "").join("") || "";
-      let parsed;
-      try {
-        parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
-      } catch {
-        parsed = { message: raw, extracted: {}, suggestedTool: null, projectReadiness: readiness };
-      }
 
       // Determine which fields were newly extracted
       const fieldUpdates = [];
@@ -535,6 +599,11 @@ export default function ImagineView() {
           });
           return next;
         });
+
+        // Update project name in storage when first captured
+        if (parsed.extracted.name && projectId) {
+          updateProject(projectId, { name: parsed.extracted.name, type: parsed.extracted.type || null });
+        }
       }
 
       if (parsed.projectReadiness !== undefined) {
@@ -547,8 +616,9 @@ export default function ImagineView() {
         fieldUpdates,
       };
       setMessages((prev) => [...prev, aiMsg]);
-      setConversationHistory([...newHistory, { role: "assistant", content: raw }]);
+      setConversationHistory([...newHistory, { role: "assistant", content: JSON.stringify(parsed) }]);
     } catch (err) {
+      console.error("sendMessage error:", err);
       setMessages((prev) => [...prev, {
         role: "assistant",
         content: "I had a brief connection issue — could you repeat that? I want to make sure I capture everything for your project.",
@@ -702,7 +772,7 @@ export default function ImagineView() {
           animation: "slideIn 0.25s ease",
         }}>
           {started ? (
-            <ProjectPanel project={project} readiness={readiness} />
+            <ProjectPanel project={project} readiness={readiness} projectId={projectId} />
           ) : (
             <div style={{ padding: "40px 20px", textAlign: "center" }}>
               <div style={{ fontFamily: SANS, fontSize: 11, color: C.border, letterSpacing: 2, textTransform: "uppercase" }}>Project folder will<br />appear here</div>

@@ -1,12 +1,27 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { C, SERIF, SANS, MONO, R, RS } from "./components/shared";
 import ProductsView from "./components/ProductsView";
 import OrdersView from "./components/OrdersView";
 import ImagineView from "./components/ImagineView";
 import ProjectView from "./components/ProjectView";
 import NewProjectModal from "./components/NewProjectModal";
+import { generateImage } from "./lib/api";
+import { getProjects } from "./lib/storage";
+
+// ─── Helpers ───
+function timeAgo(dateStr) {
+  if (!dateStr) return "";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
 
 // ─── Mock Data ───
 const PRIMARY_ACTIONS = [
@@ -352,8 +367,16 @@ function ImageDropZone({ dragOver, setDragOver, large }) {
 
 // ─── Tool Modal ───
 function ToolModal({ tool, onClose }) {
-  if (!tool) return null;
   const [dragOver, setDragOver] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const [style, setStyle] = useState("");
+  const [aspectRatio, setAspectRatio] = useState("1:1");
+  const [resolution, setResolution] = useState("2K");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedImages, setGeneratedImages] = useState([]);
+  const [error, setError] = useState(null);
+
+  if (!tool) return null;
 
   const isImageTool = ["sketch-to-jewelry", "technical-to-image", "image-to-marketing"].includes(tool.id);
   const isEstimate = tool.id === "manufacture-estimate";
@@ -361,6 +384,43 @@ function ToolModal({ tool, onClose }) {
   const isCollection = tool.id === "start-collection";
   const isFileHub = tool.id === "file-hub";
   const actionLabel = tool.actionLabel || "Generate with AI";
+
+  // Build a prompt that incorporates the tool context
+  const buildPrompt = () => {
+    const toolContext = {
+      "sketch-to-jewelry": "Photorealistic custom jewelry product photo, studio lighting, white background",
+      "technical-to-image": "Convert technical jewelry drawing into a photorealistic product image, detailed metalwork",
+      "image-to-marketing": "Luxury jewelry marketing photograph, editorial style, elegant composition",
+    };
+    const base = toolContext[tool.id] || "";
+    const parts = [base, prompt, style].filter(Boolean);
+    return parts.join(". ");
+  };
+
+  const handleGenerate = async () => {
+    if (!prompt.trim()) return;
+    setIsGenerating(true);
+    setError(null);
+    setGeneratedImages([]);
+
+    try {
+      const result = await generateImage({
+        prompt: buildPrompt(),
+        aspectRatio,
+        resolution,
+      });
+
+      if (result.images && result.images.length > 0) {
+        setGeneratedImages(result.images);
+      } else {
+        setError("No images were returned. Please try again.");
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   return (
     <div
@@ -432,16 +492,130 @@ function ToolModal({ tool, onClose }) {
           {/* ── Image-input AI tools (Sketch, Technical, Marketing) ── */}
           {isImageTool && (
             <>
-              <Section label="Upload Image">
+              <Section label="Upload Reference Image (Optional)">
                 <ImageDropZone dragOver={dragOver} setDragOver={setDragOver} large />
               </Section>
-              <Section label="Instructions">
+              <Section label="Generation Settings">
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "20px 32px" }}>
-                  <ModalField label="Prompt / Description" wide textarea />
-                  <ModalField label="Style" />
-                  <ModalField label="Output Format" />
+                  <div style={{ flex: "1 1 100%", minWidth: "100%" }}>
+                    <div style={labelStyle}>Prompt / Description</div>
+                    <textarea
+                      rows={3}
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      placeholder="Describe the jewelry piece you want to generate..."
+                      style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }}
+                      onFocus={(e) => (e.target.style.borderBottomColor = C.mid)}
+                      onBlur={(e) => (e.target.style.borderBottomColor = C.borderInput)}
+                    />
+                  </div>
+                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
+                    <div style={labelStyle}>Style</div>
+                    <input
+                      value={style}
+                      onChange={(e) => setStyle(e.target.value)}
+                      placeholder="e.g. Art Deco, Minimalist, Vintage"
+                      style={inputStyle}
+                      onFocus={(e) => (e.target.style.borderBottomColor = C.mid)}
+                      onBlur={(e) => (e.target.style.borderBottomColor = C.borderInput)}
+                    />
+                  </div>
+                  <div style={{ flex: "1 1 calc(25% - 16px)", minWidth: 120 }}>
+                    <div style={labelStyle}>Aspect Ratio</div>
+                    <select
+                      value={aspectRatio}
+                      onChange={(e) => setAspectRatio(e.target.value)}
+                      style={{
+                        ...inputStyle, cursor: "pointer", appearance: "auto",
+                        borderBottom: `1px solid ${C.borderInput}`,
+                      }}
+                    >
+                      <option value="1:1">1:1 (Square)</option>
+                      <option value="4:3">4:3 (Product)</option>
+                      <option value="3:4">3:4 (Portrait)</option>
+                      <option value="16:9">16:9 (Wide)</option>
+                      <option value="9:16">9:16 (Tall)</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 calc(25% - 16px)", minWidth: 120 }}>
+                    <div style={labelStyle}>Resolution</div>
+                    <select
+                      value={resolution}
+                      onChange={(e) => setResolution(e.target.value)}
+                      style={{
+                        ...inputStyle, cursor: "pointer", appearance: "auto",
+                        borderBottom: `1px solid ${C.borderInput}`,
+                      }}
+                    >
+                      <option value="720p">720p (Fast)</option>
+                      <option value="1K">1K</option>
+                      <option value="2K">2K (Default)</option>
+                      <option value="4K">4K (Best)</option>
+                    </select>
+                  </div>
                 </div>
               </Section>
+
+              {/* Generated image results */}
+              {(generatedImages.length > 0 || isGenerating || error) && (
+                <Section label="Generated Result">
+                  {isGenerating && (
+                    <div style={{ padding: "40px 0", textAlign: "center" }}>
+                      <div style={{
+                        width: 32, height: 32, border: `3px solid ${C.border}`, borderTopColor: C.coral,
+                        borderRadius: "50%", margin: "0 auto 16px",
+                        animation: "spin 0.8s linear infinite",
+                      }} />
+                      <div style={{ fontFamily: SANS, fontSize: 12, color: C.mid, letterSpacing: 1.5, textTransform: "uppercase" }}>
+                        Generating with Nano Banana...
+                      </div>
+                      <div style={{ fontFamily: SANS, fontSize: 11, color: C.light, marginTop: 6 }}>
+                        This may take up to 30 seconds
+                      </div>
+                    </div>
+                  )}
+                  {error && (
+                    <div style={{
+                      padding: "16px 20px", background: C.redBg, border: `1px solid ${C.redBorder}`,
+                      borderRadius: RS, marginBottom: 12,
+                    }}>
+                      <div style={{ fontFamily: SANS, fontSize: 12, color: C.coral, fontWeight: 600, marginBottom: 4 }}>
+                        Generation Failed
+                      </div>
+                      <div style={{ fontFamily: SANS, fontSize: 12, color: C.mid }}>{error}</div>
+                    </div>
+                  )}
+                  {generatedImages.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                      {generatedImages.map((img, i) => (
+                        <div key={i} style={{ position: "relative", flex: "1 1 auto", maxWidth: "100%" }}>
+                          <img
+                            src={img.url}
+                            alt={`Generated jewelry ${i + 1}`}
+                            style={{
+                              width: "100%", borderRadius: RS, border: `1px solid ${C.border}`,
+                              display: "block",
+                            }}
+                          />
+                          <a
+                            href={img.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              position: "absolute", bottom: 10, right: 10,
+                              fontFamily: SANS, fontSize: 10, fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase",
+                              padding: "6px 14px", background: "rgba(30,30,28,0.75)", color: C.white,
+                              borderRadius: RS, textDecoration: "none", backdropFilter: "blur(4px)",
+                            }}
+                          >
+                            Open Full Size
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Section>
+              )}
             </>
           )}
 
@@ -510,17 +684,27 @@ function ToolModal({ tool, onClose }) {
           {/* Actions */}
           <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
             <button
+              onClick={isImageTool ? handleGenerate : undefined}
+              disabled={isImageTool ? (isGenerating || !prompt.trim()) : false}
               style={{
                 flex: 1, fontFamily: SANS, fontSize: 12, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase",
-                padding: "14px 28px", background: C.coral, color: C.white, border: "none", borderRadius: RS,
-                cursor: "pointer", transition: "background 0.2s",
+                padding: "14px 28px",
+                background: (isImageTool && (isGenerating || !prompt.trim())) ? C.border : C.coral,
+                color: C.white, border: "none", borderRadius: RS,
+                cursor: (isImageTool && (isGenerating || !prompt.trim())) ? "default" : "pointer",
+                transition: "background 0.2s",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = C.coralHover)}
-              onMouseLeave={(e) => (e.currentTarget.style.background = C.coral)}
+              onMouseEnter={(e) => {
+                if (!(isImageTool && (isGenerating || !prompt.trim()))) e.currentTarget.style.background = C.coralHover;
+              }}
+              onMouseLeave={(e) => {
+                if (!(isImageTool && (isGenerating || !prompt.trim()))) e.currentTarget.style.background = C.coral;
+              }}
             >
-              {actionLabel}
+              {isGenerating ? "Generating..." : actionLabel}
             </button>
             <button
+              onClick={isFileHub || generatedImages.length > 0 ? onClose : undefined}
               style={{
                 fontFamily: SANS, fontSize: 12, fontWeight: 500, letterSpacing: 1.5, textTransform: "uppercase",
                 padding: "14px 24px", background: C.white, color: C.mid, border: `1px solid ${C.border}`,
@@ -529,7 +713,7 @@ function ToolModal({ tool, onClose }) {
               onMouseEnter={(e) => (e.currentTarget.style.borderColor = C.borderHover)}
               onMouseLeave={(e) => (e.currentTarget.style.borderColor = C.border)}
             >
-              {isFileHub ? "Close" : "Save Draft"}
+              {generatedImages.length > 0 ? "Done" : isFileHub ? "Close" : "Save Draft"}
             </button>
           </div>
         </div>
@@ -616,7 +800,7 @@ function ImagineIcon({ color = C.sidebarText }) {
 }
 
 // ─── Dashboard Content ───
-function DashboardContent({ onNavigate, onOpenTool }) {
+function DashboardContent({ onNavigate, onOpenTool, storedProjects = [] }) {
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return "Good morning";
@@ -819,6 +1003,20 @@ function DashboardContent({ onNavigate, onOpenTool }) {
             </span>
           }
         >
+          {storedProjects.slice(0, 3).map((p) => (
+            <ProjectRow
+              key={p.id}
+              project={{
+                id: p.id,
+                name: p.name || "Untitled Project",
+                collection: p.fields?.collection || p.type || "Custom",
+                status: p.status || "draft",
+                stage: p.stage || "Concept",
+                time: timeAgo(p.updatedAt),
+              }}
+              onClick={() => onNavigate("project-detail", p.id)}
+            />
+          ))}
           {PROJECTS.map((p) => (
             <ProjectRow key={p.id} project={p} onClick={() => onNavigate("project-detail")} />
           ))}
@@ -892,13 +1090,22 @@ function DashboardContent({ onNavigate, onOpenTool }) {
 export default function ZipJewelerDashboard() {
   const [activeNav, setActiveNav] = useState("dashboard");
   const [activeTool, setActiveTool] = useState(null);
-  const [loaded, setLoaded] = useState(false);
+  const [storedProjects, setStoredProjects] = useState([]);
+  const [selectedProjectId, setSelectedProjectId] = useState(null);
 
-  useEffect(() => {
-    setTimeout(() => setLoaded(true), 50);
+  // Load projects from storage on mount and when returning to dashboard/projects
+  const refreshProjects = useCallback(() => {
+    setStoredProjects(getProjects());
   }, []);
 
-  const handleNavigate = (target) => {
+  useEffect(() => {
+    refreshProjects();
+  }, [activeNav, refreshProjects]);
+
+  const handleNavigate = (target, projectId) => {
+    if (target === "project-detail" && projectId) {
+      setSelectedProjectId(projectId);
+    }
     setActiveNav(target);
     setActiveTool(null);
   };
@@ -1018,12 +1225,11 @@ export default function ZipJewelerDashboard() {
           flex: 1,
           marginLeft: 200,
           minHeight: "100vh",
-          opacity: loaded ? 1 : 0,
-          transition: "opacity 0.4s ease",
+          animation: "fadeIn 0.4s ease",
         }}
       >
         {activeNav === "dashboard" && (
-          <DashboardContent onNavigate={handleNavigate} onOpenTool={setActiveTool} />
+          <DashboardContent onNavigate={handleNavigate} onOpenTool={setActiveTool} storedProjects={storedProjects} />
         )}
         {activeNav === "projects" && (
           <>
@@ -1053,7 +1259,25 @@ export default function ZipJewelerDashboard() {
               </div>
             </header>
             <div style={{ padding: "28px 44px 60px", maxWidth: 1080 }}>
-              <Section label="All Projects" style={{ padding: "24px 28px 28px" }}>
+              {storedProjects.length > 0 && (
+                <Section label="Your Projects" style={{ padding: "24px 28px 28px" }}>
+                  {storedProjects.map((p) => (
+                    <ProjectRow
+                      key={p.id}
+                      project={{
+                        id: p.id,
+                        name: p.name || "Untitled Project",
+                        collection: p.fields?.collection || p.type || "Custom",
+                        status: p.status || "draft",
+                        stage: p.stage || "Concept",
+                        time: timeAgo(p.updatedAt),
+                      }}
+                      onClick={() => handleNavigate("project-detail", p.id)}
+                    />
+                  ))}
+                </Section>
+              )}
+              <Section label="Sample Projects" style={{ padding: "24px 28px 28px" }}>
                 {PROJECTS.map((p) => (
                   <ProjectRow key={p.id} project={p} onClick={() => handleNavigate("project-detail")} />
                 ))}
@@ -1065,13 +1289,13 @@ export default function ZipJewelerDashboard() {
         {activeNav === "orders" && <OrdersView />}
         {activeNav === "imagine" && <ImagineView />}
         {activeNav === "project-detail" && (
-          <ProjectView onBack={() => handleNavigate("projects")} />
+          <ProjectView onBack={() => handleNavigate("projects")} projectId={selectedProjectId} />
         )}
       </main>
 
       {/* ═══ Tool Modal ═══ */}
       {activeTool?.id === "new-project" ? (
-        <NewProjectModal onClose={() => setActiveTool(null)} />
+        <NewProjectModal onClose={() => { setActiveTool(null); refreshProjects(); }} onProjectCreated={(id) => { refreshProjects(); handleNavigate("project-detail", id); }} />
       ) : (
         <ToolModal tool={activeTool} onClose={() => setActiveTool(null)} />
       )}

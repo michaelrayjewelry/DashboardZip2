@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { C, SERIF, SANS, MONO, R, RS, ANTHROPIC_KEY } from "./shared";
+import { C, SERIF, SANS, MONO, R, RS } from "./shared";
+import { chatWithClaudeJSON, generateImage } from "../lib/api";
+import {
+  createProject, updateProject, saveChatHistory,
+  saveGeneratedImageToProject, uploadFileToProject,
+} from "../lib/storage";
 
 // ═══════════════════════════════════════
 // JEWELRY TYPE CONFIGURATION
@@ -301,15 +306,44 @@ function ToolSuggestionCard({ toolKey, reason, onActivate }) {
 // ═══════════════════════════════════════
 // MAIN NEW PROJECT MODAL
 // ═══════════════════════════════════════
-export default function NewProjectModal({ onClose }) {
+export default function NewProjectModal({ onClose, onProjectCreated }) {
   // ─── Form state ───
   const [jewelryType, setJewelryType] = useState(null);
   const [fields, setFields] = useState({});
   const [dragOver, setDragOver] = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState([]);
   const [clientInfo] = useState({
     email: "client@email.com", name: "", phone: "",
     created: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
   });
+
+  // ─── Project storage ───
+  const [projectId, setProjectId] = useState(null);
+
+  // Create project on mount
+  useEffect(() => {
+    const p = createProject({ name: "New Project" });
+    setProjectId(p.id);
+  }, []);
+
+  // Persist fields whenever they change
+  useEffect(() => {
+    if (projectId && Object.keys(fields).length > 0) {
+      updateProject(projectId, {
+        fields,
+        type: jewelryType,
+        name: fields.name || "New Project",
+        readiness,
+      });
+    }
+  }, [fields, jewelryType, projectId, readiness]);
+
+  // Persist chat history
+  useEffect(() => {
+    if (projectId && conversationHistory.length > 0) {
+      saveChatHistory(projectId, conversationHistory);
+    }
+  }, [conversationHistory, projectId]);
 
   // ─── Chat state ───
   const [chatOpen, setChatOpen] = useState(true);
@@ -322,6 +356,7 @@ export default function NewProjectModal({ onClose }) {
 
   const chatEndRef = useRef(null);
   const chatInputRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -352,36 +387,23 @@ AVAILABLE FIELD KEYS: ${allFields.map((f) => f.key).join(", ")}`;
   const startChat = useCallback(async () => {
     setChatStarted(true);
     setIsLoading(true);
+    const contextMsg = `${buildContext()}\n\nStart the conversation. Greet the jeweler and ask what piece they're creating today. Be brief.`;
     try {
-      const contextMsg = `${buildContext()}\n\nStart the conversation. Greet the jeweler and ask what piece they're creating today. Be brief.`;
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": ANTHROPIC_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 800,
-          system: PROJECT_SYSTEM_PROMPT,
-          messages: [{ role: "user", content: contextMsg }],
-        }),
+      const parsed = await chatWithClaudeJSON({
+        system: PROJECT_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: contextMsg }],
+        maxTokens: 800,
+        fallback: { fieldUpdates: {}, suggestedTool: null, projectReadiness: 0 },
       });
-      const data = await resp.json();
-      const raw = data.content?.map((b) => b.text || "").join("") || "";
-      let parsed;
-      try { parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()); }
-      catch { parsed = { message: raw, fieldUpdates: {}, suggestedTool: null, projectReadiness: 0 }; }
 
       setMessages([{ role: "assistant", content: parsed.message, suggestedTool: parsed.suggestedTool, suggestedToolReason: parsed.suggestedToolReason }]);
       setConversationHistory([
         { role: "user", content: contextMsg },
-        { role: "assistant", content: raw },
+        { role: "assistant", content: JSON.stringify(parsed) },
       ]);
       if (parsed.projectReadiness) setReadiness(parsed.projectReadiness);
-    } catch {
+    } catch (err) {
+      console.error("startChat error:", err);
       setMessages([{ role: "assistant", content: "Hi! What piece are we creating today? Tell me your vision and I'll help fill in all the details." }]);
       setConversationHistory([
         { role: "user", content: "Start." },
@@ -406,26 +428,12 @@ AVAILABLE FIELD KEYS: ${allFields.map((f) => f.key).join(", ")}`;
     const newHistory = [...conversationHistory, { role: "user", content: userContent }];
 
     try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": ANTHROPIC_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 800,
-          system: PROJECT_SYSTEM_PROMPT,
-          messages: newHistory,
-        }),
+      const parsed = await chatWithClaudeJSON({
+        system: PROJECT_SYSTEM_PROMPT,
+        messages: newHistory,
+        maxTokens: 800,
+        fallback: { fieldUpdates: {}, suggestedTool: null, projectReadiness: readiness },
       });
-      const data = await resp.json();
-      const raw = data.content?.map((b) => b.text || "").join("") || "";
-      let parsed;
-      try { parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()); }
-      catch { parsed = { message: raw, fieldUpdates: {}, suggestedTool: null, projectReadiness: readiness }; }
 
       // Apply field updates
       const toasts = [];
@@ -453,8 +461,9 @@ AVAILABLE FIELD KEYS: ${allFields.map((f) => f.key).join(", ")}`;
         suggestedTool: parsed.suggestedTool,
         suggestedToolReason: parsed.suggestedToolReason,
       }]);
-      setConversationHistory([...newHistory, { role: "assistant", content: raw }]);
-    } catch {
+      setConversationHistory([...newHistory, { role: "assistant", content: JSON.stringify(parsed) }]);
+    } catch (err) {
+      console.error("sendMessage error:", err);
       setMessages((prev) => [...prev, { role: "assistant", content: "Connection issue — could you repeat that?" }]);
     }
     setIsLoading(false);
@@ -466,9 +475,46 @@ AVAILABLE FIELD KEYS: ${allFields.map((f) => f.key).join(", ")}`;
   };
 
   // ─── Handle tool activation ───
-  const handleToolActivation = (toolKey) => {
+  const handleToolActivation = async (toolKey) => {
+    if (toolKey === "generate_image") {
+      // Build prompt from current fields and generate image
+      const parts = ["Photorealistic studio product photograph of custom jewelry, white background, professional lighting"];
+      if (jewelryType) parts.push(jewelryType);
+      if (fields.description) parts.push(fields.description);
+      if (fields.metal) parts.push(`made of ${fields.metal}`);
+      if (fields.mainGemstone) parts.push(`featuring ${fields.mainGemstone}`);
+      if (fields.designMotif) parts.push(`${fields.designMotif} design motif`);
+      if (fields.finish) parts.push(`${fields.finish} finish`);
+      const prompt = parts.join(", ");
+
+      // Show generating state in chat
+      setMessages((prev) => [...prev,
+        { role: "user", content: "Generate an AI image of this piece based on the current specifications." },
+        { role: "assistant", content: "Generating an AI visualization of your piece... This may take up to 30 seconds." },
+      ]);
+
+      try {
+        const result = await generateImage({ prompt, aspectRatio: "1:1", resolution: "2K" });
+        if (result.images?.length) {
+          const url = result.images[0].url;
+          if (projectId) {
+            saveGeneratedImageToProject(projectId, url, "render", prompt);
+          }
+          setMessages((prev) => [...prev, {
+            role: "assistant",
+            content: `Here's your AI-generated visualization! The image has been saved to your project files.\n\nImage: ${url}`,
+            imageUrl: url,
+          }]);
+        } else {
+          setMessages((prev) => [...prev, { role: "assistant", content: "No image was returned. Please try again." }]);
+        }
+      } catch (err) {
+        setMessages((prev) => [...prev, { role: "assistant", content: `Image generation failed: ${err.message}` }]);
+      }
+      return;
+    }
+
     const prompts = {
-      generate_image: "Generate an AI image of this piece based on the current specifications.",
       estimate_cost: "Estimate the manufacturing cost based on current materials and specs.",
       generate_cad: "Generate a 3D CAD model based on the current specifications.",
       recommend_next: "Based on the current project state, what should I fill in next to make this project more complete?",
@@ -566,22 +612,74 @@ AVAILABLE FIELD KEYS: ${allFields.map((f) => f.key).join(", ")}`;
 
             {/* Reference Image */}
             <SectionBox label="Reference Image">
-              <div
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => { e.preventDefault(); setDragOver(false); }}
-                style={{
-                  width: 160, height: 160, borderRadius: RS,
-                  background: dragOver ? "rgba(90,138,74,0.06)" : C.border,
-                  border: `2px dashed ${dragOver ? C.green : "transparent"}`,
-                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                  cursor: "pointer", transition: "all 0.2s",
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.pdf,.step,.stp,.stl,.obj,.doc,.docx"
+                multiple
+                style={{ display: "none" }}
+                onChange={async (e) => {
+                  if (!projectId) return;
+                  const files = Array.from(e.target.files || []);
+                  for (const file of files) {
+                    const meta = await uploadFileToProject(projectId, file, "reference");
+                    if (meta) setUploadedFiles((prev) => [...prev, meta]);
+                  }
+                  e.target.value = "";
                 }}
-              >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={dragOver ? C.green : C.light} strokeWidth="1.2" style={{ marginBottom: 6 }}>
-                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
-                </svg>
-                <span style={{ fontFamily: SANS, fontSize: 9.5, color: C.light, letterSpacing: 1.5, textTransform: "uppercase" }}>Drop image</span>
+              />
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={async (e) => {
+                    e.preventDefault();
+                    setDragOver(false);
+                    if (!projectId) return;
+                    const files = Array.from(e.dataTransfer.files || []);
+                    for (const file of files) {
+                      const meta = await uploadFileToProject(projectId, file, "reference");
+                      if (meta) setUploadedFiles((prev) => [...prev, meta]);
+                    }
+                  }}
+                  style={{
+                    width: 160, height: 160, borderRadius: RS,
+                    background: dragOver ? "rgba(90,138,74,0.06)" : C.border,
+                    border: `2px dashed ${dragOver ? C.green : "transparent"}`,
+                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                    cursor: "pointer", transition: "all 0.2s",
+                  }}
+                >
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={dragOver ? C.green : C.light} strokeWidth="1.2" style={{ marginBottom: 6 }}>
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                  <span style={{ fontFamily: SANS, fontSize: 9.5, color: C.light, letterSpacing: 1.5, textTransform: "uppercase" }}>
+                    {uploadedFiles.length > 0 ? "+ Add more" : "Drop or click"}
+                  </span>
+                </div>
+                {uploadedFiles.length > 0 && (
+                  <div style={{ flex: 1, minWidth: 150 }}>
+                    <div style={{ fontFamily: SANS, fontSize: 9.5, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase", color: C.label, marginBottom: 6 }}>
+                      {uploadedFiles.length} file{uploadedFiles.length !== 1 ? "s" : ""} uploaded
+                    </div>
+                    {uploadedFiles.map((f) => (
+                      <div key={f.id} style={{
+                        display: "flex", alignItems: "center", gap: 8, padding: "5px 0",
+                        borderBottom: `1px solid ${C.border}`,
+                      }}>
+                        <span style={{
+                          fontFamily: MONO, fontSize: 8, fontWeight: 600, color: C.blue, letterSpacing: 1,
+                          padding: "2px 6px", background: C.blueBg, borderRadius: RS, border: `1px solid ${C.blueBorder}`,
+                          textTransform: "uppercase",
+                        }}>{f.category}</span>
+                        <span style={{ fontFamily: SANS, fontSize: 11, color: C.dark, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {f.name}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </SectionBox>
 
@@ -603,19 +701,38 @@ AVAILABLE FIELD KEYS: ${allFields.map((f) => f.key).join(", ")}`;
 
             {/* Actions */}
             <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-              <button style={{
-                flex: 1, fontFamily: SANS, fontSize: 11.5, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase",
-                padding: "13px 24px", background: C.coral, color: C.white, border: "none", borderRadius: RS,
-                cursor: "pointer", transition: "background 0.2s",
-              }}
+              <button
+                onClick={() => {
+                  if (projectId) {
+                    updateProject(projectId, {
+                      status: "in-progress",
+                      name: fields.name || "Untitled Project",
+                      type: jewelryType,
+                      fields,
+                      readiness,
+                    });
+                    onProjectCreated?.(projectId);
+                  }
+                  onClose();
+                }}
+                style={{
+                  flex: 1, fontFamily: SANS, fontSize: 11.5, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase",
+                  padding: "13px 24px", background: C.coral, color: C.white, border: "none", borderRadius: RS,
+                  cursor: "pointer", transition: "background 0.2s",
+                }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = C.coralHover)}
                 onMouseLeave={(e) => (e.currentTarget.style.background = C.coral)}
               >Create Project</button>
-              <button style={{
-                fontFamily: SANS, fontSize: 11.5, fontWeight: 500, letterSpacing: 1.5, textTransform: "uppercase",
-                padding: "13px 20px", background: C.white, color: C.mid, border: `1px solid ${C.border}`,
-                borderRadius: RS, cursor: "pointer", transition: "all 0.2s",
-              }}
+              <button
+                onClick={() => {
+                  // Already auto-saved — just close
+                  onClose();
+                }}
+                style={{
+                  fontFamily: SANS, fontSize: 11.5, fontWeight: 500, letterSpacing: 1.5, textTransform: "uppercase",
+                  padding: "13px 20px", background: C.white, color: C.mid, border: `1px solid ${C.border}`,
+                  borderRadius: RS, cursor: "pointer", transition: "all 0.2s",
+                }}
                 onMouseEnter={(e) => (e.currentTarget.style.borderColor = C.borderHover)}
                 onMouseLeave={(e) => (e.currentTarget.style.borderColor = C.border)}
               >Save Draft</button>
