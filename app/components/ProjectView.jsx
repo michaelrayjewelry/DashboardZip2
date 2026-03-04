@@ -750,57 +750,100 @@ export default function ProjectView({ onBack, projectId }) {
         {/* ════════════════════════════════════════ */}
         {/* OVERVIEW TAB */}
         {/* ════════════════════════════════════════ */}
-        {activeTab === "overview" && (
-          <>
-            {/* Client Info */}
-            <Section label="Client" rightAction={<SmallBtn label="Edit Client" onClick={() => void 0} />}>
-              <div style={{ display: "flex", gap: 40, flexWrap: "wrap" }}>
-                <InfoField label="Email" value={project.client.email} />
-                <InfoField label="Name" value={project.client.name} />
-                <InfoField label="Phone" value={project.client.phone} />
-                <InfoField label="Created" value={project.client.created} />
-              </div>
-            </Section>
-
-            {/* Quick Info Grid */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 14 }}>
-              {[
-                { label: "Type", value: project.fields.type || "Ring" },
-                { label: "Metal", value: project.fields.metal ? `${project.fields.metalKarat || ""} ${project.fields.metal}`.trim() : "14k Yellow Gold" },
-                { label: "Est. Weight", value: project.fields.weight || "—" },
-                { label: "Budget", value: project.fields.budget || "—" },
-              ].map((s, i) => (
-                <div key={i} style={{ background: C.section, borderRadius: R, border: `1px solid ${C.border}`, padding: "18px 20px", textAlign: "center" }}>
-                  <div style={{ fontFamily: SANS, fontSize: 9.5, fontWeight: 600, letterSpacing: 2.5, textTransform: "uppercase", color: C.label, marginBottom: 8 }}>{s.label}</div>
-                  <div style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 600, color: C.black }}>{s.value}</div>
+        {activeTab === "overview" && (() => {
+          const heroFile = (filesByCategory.render || [])[0] || (filesByCategory.reference || [])[0];
+          const heroUrl = heroFile ? getFileUrl(heroFile) : null;
+          const f = project.fields;
+          const specs = [
+            { label: "Type", value: f.type || "—" },
+            { label: "Metal", value: f.metal ? `${f.metalKarat || ""} ${f.metal}`.trim() : "—" },
+            { label: "Gemstone", value: f.mainGemstone || "—" },
+            { label: "Shape", value: f.gemstoneShape || "—" },
+            { label: "Setting", value: f.settingType || "—" },
+            { label: "Finish", value: f.finish || "—" },
+            { label: "Size", value: f.size || "—" },
+            { label: "Weight", value: f.weight || "—" },
+            { label: "Budget", value: f.budget || "—" },
+            { label: "Timeline", value: f.timeline || "—" },
+          ];
+          return (
+            <>
+              {/* ── Product Card ── */}
+              <div style={{
+                display: "flex", gap: 28, padding: 24,
+                background: C.section, borderRadius: R, border: `1px solid ${C.border}`, marginBottom: 14,
+              }}>
+                {/* Hero image */}
+                <div style={{
+                  width: 220, height: 220, flexShrink: 0, borderRadius: RS, overflow: "hidden",
+                  background: heroUrl ? `url(${heroUrl}) center/cover` : C.border,
+                  border: `1px solid ${C.border}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  {!heroUrl && (
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={C.light} strokeWidth="1">
+                      <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" />
+                    </svg>
+                  )}
                 </div>
-              ))}
-            </div>
 
-            {/* Reference Images */}
-            <Section label="Reference Images" count={(filesByCategory.reference || []).length} rightAction={<SmallBtn label="+ Upload" onClick={() => triggerUpload("reference")} />}>
-              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                {(filesByCategory.reference || []).map((f) => {
-                  const url = getFileUrl(f);
-                  return <ImageSlot key={f.id} label={f.name} hasImage={!!url} src={url} />;
-                })}
-                {(filesByCategory.render || []).map((f) => {
-                  const url = getFileUrl(f);
-                  return <ImageSlot key={f.id} label={f.name} hasImage={!!url} src={url} />;
-                })}
-                <ImageSlot label="Add Image" hasImage={false} />
+                {/* Info right */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 600, color: C.black, letterSpacing: 3, textTransform: "uppercase", lineHeight: 1.15 }}>
+                    {project.name}
+                  </div>
+                  <div style={{ fontFamily: SANS, fontSize: 11, color: C.light, marginTop: 4, letterSpacing: 1 }}>
+                    {[project.collection, f.type].filter(Boolean).join(" · ") || "Custom Jewelry"}
+                  </div>
+
+                  <div style={{ width: "100%", height: 1, background: C.border, margin: "14px 0 12px" }} />
+
+                  {/* 2-col spec grid */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 24px" }}>
+                    {specs.map((s, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "3px 0" }}>
+                        <span style={{ fontFamily: SANS, fontSize: 9.5, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase", color: C.label, minWidth: 70 }}>{s.label}</span>
+                        <span style={{ fontFamily: SANS, fontSize: 12.5, color: s.value === "—" ? C.light : C.dark, fontWeight: 500 }}>{s.value}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Client row */}
+                  <div style={{ width: "100%", height: 1, background: C.border, margin: "12px 0 10px" }} />
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                    <span style={{ fontFamily: SANS, fontSize: 9.5, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase", color: C.label }}>Client</span>
+                    <span style={{ fontFamily: SANS, fontSize: 12.5, color: C.dark, fontWeight: 500 }}>
+                      {[project.client.name, project.client.email].filter((v) => v && v !== "—").join(" · ") || "—"}
+                    </span>
+                  </div>
+                </div>
               </div>
-            </Section>
 
-            {/* Recent Activity */}
-            <Section label="Recent Activity" rightAction={<span onClick={() => setActiveTab("timeline")} style={{ fontFamily: SANS, fontSize: 10.5, color: C.light, letterSpacing: 1.5, textTransform: "uppercase", cursor: "pointer" }}>View All →</span>}>
-              <TimelineItem icon="📐" title="CAD file uploaded" detail="crown-thorns-v3.step — Revision 3 from designer" time="2h ago" accent={C.blue} />
-              <TimelineItem icon="💬" title="Message from CAD designer" detail="'Band width adjusted to 6mm per your note'" time="5h ago" accent={C.purple} />
-              <TimelineItem icon="✏️" title="Specs updated" detail="Metal karat changed from 18k to 14k" time="1d ago" accent={C.amber} />
-              <TimelineItem icon="🖼" title="AI render generated" detail="Photorealistic render — front view, studio lighting" time="2d ago" accent={C.green} />
-            </Section>
-          </>
-        )}
+              {/* ── Images ── */}
+              <Section label="Images" count={(filesByCategory.reference || []).length + (filesByCategory.render || []).length} rightAction={<SmallBtn label="+ Upload" onClick={() => triggerUpload("reference")} />}>
+                <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                  {(filesByCategory.render || []).map((file) => {
+                    const url = getFileUrl(file);
+                    return <ImageSlot key={file.id} label={file.name} hasImage={!!url} src={url} />;
+                  })}
+                  {(filesByCategory.reference || []).map((file) => {
+                    const url = getFileUrl(file);
+                    return <ImageSlot key={file.id} label={file.name} hasImage={!!url} src={url} />;
+                  })}
+                  <ImageSlot label="Add Image" hasImage={false} />
+                </div>
+              </Section>
+
+              {/* ── Recent Activity ── */}
+              <Section label="Recent Activity" rightAction={<span onClick={() => setActiveTab("timeline")} style={{ fontFamily: SANS, fontSize: 10.5, color: C.light, letterSpacing: 1.5, textTransform: "uppercase", cursor: "pointer" }}>View All →</span>}>
+                <TimelineItem icon="📐" title="CAD file uploaded" detail="crown-thorns-v3.step — Revision 3 from designer" time="2h ago" accent={C.blue} />
+                <TimelineItem icon="💬" title="Message from CAD designer" detail="'Band width adjusted to 6mm per your note'" time="5h ago" accent={C.purple} />
+                <TimelineItem icon="✏️" title="Specs updated" detail="Metal karat changed from 18k to 14k" time="1d ago" accent={C.amber} />
+                <TimelineItem icon="🖼" title="AI render generated" detail="Photorealistic render — front view, studio lighting" time="2d ago" accent={C.green} />
+              </Section>
+            </>
+          );
+        })()}
 
         {/* ════════════════════════════════════════ */}
         {/* DESIGN & ASSETS TAB */}
