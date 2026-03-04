@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { C, SERIF, SANS, MONO, R, RS, ANTHROPIC_KEY } from "./shared";
+import { C, SERIF, SANS, MONO, R, RS } from "./shared";
+import { chatWithClaudeJSON } from "../lib/api";
 
 // ─── SYSTEM PROMPT ───
 const SYSTEM_PROMPT = `You are the ZipJeweler AI Design Consultant — a master jeweler's creative partner embedded inside ZipJeweler, a SaaS platform for custom jewelry production workflow.
@@ -437,29 +438,13 @@ export default function ImagineView() {
     setStarted(true);
     setIsLoading(true);
     try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": ANTHROPIC_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          system: SYSTEM_PROMPT,
-          messages: [{ role: "user", content: "Start the conversation. Greet me and ask what we're imagining today." }],
-        }),
+      const startMsg = "Start the conversation. Greet me and ask what we're imagining today.";
+      const parsed = await chatWithClaudeJSON({
+        system: SYSTEM_PROMPT,
+        messages: [{ role: "user", content: startMsg }],
+        maxTokens: 1000,
+        fallback: { extracted: {}, suggestedTool: null, projectReadiness: 0 },
       });
-      const data = await resp.json();
-      const text = data.content?.map((b) => b.text || "").join("") || "";
-      let parsed;
-      try {
-        parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-      } catch {
-        parsed = { message: text, extracted: {}, suggestedTool: null, projectReadiness: 0 };
-      }
 
       const aiMsg = {
         role: "assistant", content: parsed.message,
@@ -467,10 +452,11 @@ export default function ImagineView() {
       };
       setMessages([aiMsg]);
       setConversationHistory([
-        { role: "user", content: "Start the conversation. Greet me and ask what we're imagining today." },
-        { role: "assistant", content: text },
+        { role: "user", content: startMsg },
+        { role: "assistant", content: JSON.stringify(parsed) },
       ]);
     } catch (err) {
+      console.error("startConversation error:", err);
       setMessages([{ role: "assistant", content: "What are we imagining today?" }]);
       setConversationHistory([
         { role: "user", content: "Start the conversation." },
@@ -494,29 +480,12 @@ export default function ImagineView() {
     const newHistory = [...conversationHistory, { role: "user", content: text }];
 
     try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": ANTHROPIC_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          system: SYSTEM_PROMPT,
-          messages: newHistory,
-        }),
+      const parsed = await chatWithClaudeJSON({
+        system: SYSTEM_PROMPT,
+        messages: newHistory,
+        maxTokens: 1000,
+        fallback: { extracted: {}, suggestedTool: null, projectReadiness: readiness },
       });
-      const data = await resp.json();
-      const raw = data.content?.map((b) => b.text || "").join("") || "";
-      let parsed;
-      try {
-        parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
-      } catch {
-        parsed = { message: raw, extracted: {}, suggestedTool: null, projectReadiness: readiness };
-      }
 
       // Determine which fields were newly extracted
       const fieldUpdates = [];
@@ -547,8 +516,9 @@ export default function ImagineView() {
         fieldUpdates,
       };
       setMessages((prev) => [...prev, aiMsg]);
-      setConversationHistory([...newHistory, { role: "assistant", content: raw }]);
+      setConversationHistory([...newHistory, { role: "assistant", content: JSON.stringify(parsed) }]);
     } catch (err) {
+      console.error("sendMessage error:", err);
       setMessages((prev) => [...prev, {
         role: "assistant",
         content: "I had a brief connection issue — could you repeat that? I want to make sure I capture everything for your project.",

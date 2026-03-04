@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { C, SERIF, SANS, MONO, R, RS, ANTHROPIC_KEY } from "./shared";
+import { C, SERIF, SANS, MONO, R, RS } from "./shared";
+import { chatWithClaudeJSON } from "../lib/api";
 
 // ═══════════════════════════════════════
 // JEWELRY TYPE CONFIGURATION
@@ -352,36 +353,23 @@ AVAILABLE FIELD KEYS: ${allFields.map((f) => f.key).join(", ")}`;
   const startChat = useCallback(async () => {
     setChatStarted(true);
     setIsLoading(true);
+    const contextMsg = `${buildContext()}\n\nStart the conversation. Greet the jeweler and ask what piece they're creating today. Be brief.`;
     try {
-      const contextMsg = `${buildContext()}\n\nStart the conversation. Greet the jeweler and ask what piece they're creating today. Be brief.`;
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": ANTHROPIC_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 800,
-          system: PROJECT_SYSTEM_PROMPT,
-          messages: [{ role: "user", content: contextMsg }],
-        }),
+      const parsed = await chatWithClaudeJSON({
+        system: PROJECT_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: contextMsg }],
+        maxTokens: 800,
+        fallback: { fieldUpdates: {}, suggestedTool: null, projectReadiness: 0 },
       });
-      const data = await resp.json();
-      const raw = data.content?.map((b) => b.text || "").join("") || "";
-      let parsed;
-      try { parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()); }
-      catch { parsed = { message: raw, fieldUpdates: {}, suggestedTool: null, projectReadiness: 0 }; }
 
       setMessages([{ role: "assistant", content: parsed.message, suggestedTool: parsed.suggestedTool, suggestedToolReason: parsed.suggestedToolReason }]);
       setConversationHistory([
         { role: "user", content: contextMsg },
-        { role: "assistant", content: raw },
+        { role: "assistant", content: JSON.stringify(parsed) },
       ]);
       if (parsed.projectReadiness) setReadiness(parsed.projectReadiness);
-    } catch {
+    } catch (err) {
+      console.error("startChat error:", err);
       setMessages([{ role: "assistant", content: "Hi! What piece are we creating today? Tell me your vision and I'll help fill in all the details." }]);
       setConversationHistory([
         { role: "user", content: "Start." },
@@ -406,26 +394,12 @@ AVAILABLE FIELD KEYS: ${allFields.map((f) => f.key).join(", ")}`;
     const newHistory = [...conversationHistory, { role: "user", content: userContent }];
 
     try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": ANTHROPIC_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 800,
-          system: PROJECT_SYSTEM_PROMPT,
-          messages: newHistory,
-        }),
+      const parsed = await chatWithClaudeJSON({
+        system: PROJECT_SYSTEM_PROMPT,
+        messages: newHistory,
+        maxTokens: 800,
+        fallback: { fieldUpdates: {}, suggestedTool: null, projectReadiness: readiness },
       });
-      const data = await resp.json();
-      const raw = data.content?.map((b) => b.text || "").join("") || "";
-      let parsed;
-      try { parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()); }
-      catch { parsed = { message: raw, fieldUpdates: {}, suggestedTool: null, projectReadiness: readiness }; }
 
       // Apply field updates
       const toasts = [];
@@ -453,8 +427,9 @@ AVAILABLE FIELD KEYS: ${allFields.map((f) => f.key).join(", ")}`;
         suggestedTool: parsed.suggestedTool,
         suggestedToolReason: parsed.suggestedToolReason,
       }]);
-      setConversationHistory([...newHistory, { role: "assistant", content: raw }]);
-    } catch {
+      setConversationHistory([...newHistory, { role: "assistant", content: JSON.stringify(parsed) }]);
+    } catch (err) {
+      console.error("sendMessage error:", err);
       setMessages((prev) => [...prev, { role: "assistant", content: "Connection issue — could you repeat that?" }]);
     }
     setIsLoading(false);
