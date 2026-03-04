@@ -354,7 +354,7 @@ AVAILABLE FIELD KEYS: ${allFields.map((f) => f.key).join(", ")}`;
     setIsLoading(true);
     try {
       const contextMsg = `${buildContext()}\n\nStart the conversation. Greet the jeweler and ask what piece they're creating today. Be brief.`;
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      const resp = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -401,7 +401,7 @@ AVAILABLE FIELD KEYS: ${allFields.map((f) => f.key).join(", ")}`;
     const newHistory = [...conversationHistory, { role: "user", content: userContent }];
 
     try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      const resp = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
