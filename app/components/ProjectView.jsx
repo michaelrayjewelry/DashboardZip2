@@ -313,45 +313,6 @@ function ChatBubble({ from, message, time, isMe }) {
   );
 }
 
-// ─── PIPELINE STAGES ───
-const PIPELINE = [
-  { key: "concept", label: "Concept", icon: "💡" },
-  { key: "design", label: "Design", icon: "✏️" },
-  { key: "cad", label: "CAD", icon: "📐" },
-  { key: "approval", label: "Approval", icon: "✓" },
-  { key: "casting", label: "Casting", icon: "🔥" },
-  { key: "setting", label: "Setting", icon: "💎" },
-  { key: "finishing", label: "Finishing", icon: "✨" },
-  { key: "delivery", label: "Delivery", icon: "📦" },
-];
-
-function PipelineBar({ current }) {
-  const idx = PIPELINE.findIndex((p) => p.key === current);
-  return (
-    <div style={{ display: "flex", gap: 2, alignItems: "stretch" }}>
-      {PIPELINE.map((stage, i) => {
-        const done = i < idx;
-        const active = i === idx;
-        return (
-          <div key={stage.key} style={{
-            flex: 1, textAlign: "center", padding: "10px 4px 8px",
-            background: done ? C.greenBg : active ? C.blueBg : "transparent",
-            border: `1px solid ${done ? C.greenBorder : active ? C.blueBorder : C.border}`,
-            borderRadius: i === 0 ? `${RS}px 0 0 ${RS}px` : i === PIPELINE.length - 1 ? `0 ${RS}px ${RS}px 0` : 0,
-            cursor: "pointer", transition: "all 0.2s",
-          }}>
-            <div style={{ fontSize: 13, marginBottom: 3 }}>{stage.icon}</div>
-            <div style={{
-              fontFamily: SANS, fontSize: 8.5, fontWeight: 600,
-              letterSpacing: 2, textTransform: "uppercase",
-              color: done ? C.green : active ? C.blue : C.light,
-            }}>{stage.label}</div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 // ─── BOM HELPERS ───
 const KARAT_PURITY = { "10k": "417", "14k": "585", "18k": "750", "22k": "916", "24k": "999" };
@@ -860,7 +821,6 @@ export default function ProjectView({ onBack, projectId }) {
             }}>{"\u2726"} AI Chat</button>
           </div>
         </div>
-        <PipelineBar current={project.stage} />
       </header>
 
       {/* ─── Tab Bar ─── */}
