@@ -403,6 +403,7 @@ export default function ProjectView({ onBack, projectId }) {
 
   // Get files grouped by category
   const filesByCategory = projectId ? getProjectFilesByCategory(projectId) : {};
+  const storedGeneratedImages = storedProject?.generatedImages || [];
   const getFileUrl = (f) => f.url || (f.blobKey ? fileUrls[f.blobKey] : null);
   const getFileTypeKey = (f) => {
     const catMap = { reference: "image", sketch: "image", render: "image", marketing: "image", cad: "cad", model3d: "model", document: "doc", certificate: "cert", other: "doc" };
@@ -493,10 +494,10 @@ export default function ProjectView({ onBack, projectId }) {
             {/* Quick Info Grid */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 14 }}>
               {[
-                { label: "Type", value: "Ring" },
-                { label: "Metal", value: "14k Yellow Gold" },
-                { label: "Est. Weight", value: "8.2g" },
-                { label: "Est. Cost", value: "$1,240" },
+                { label: "Type", value: project.fields.type || "Ring" },
+                { label: "Metal", value: project.fields.metal ? `${project.fields.metalKarat || ""} ${project.fields.metal}`.trim() : "14k Yellow Gold" },
+                { label: "Est. Weight", value: project.fields.weight || "—" },
+                { label: "Budget", value: project.fields.budget || "—" },
               ].map((s, i) => (
                 <div key={i} style={{ background: C.section, borderRadius: R, border: `1px solid ${C.border}`, padding: "18px 20px", textAlign: "center" }}>
                   <div style={{ fontFamily: SANS, fontSize: 9.5, fontWeight: 600, letterSpacing: 2.5, textTransform: "uppercase", color: C.label, marginBottom: 8 }}>{s.label}</div>
@@ -535,10 +536,14 @@ export default function ProjectView({ onBack, projectId }) {
         {/* ════════════════════════════════════════ */}
         {activeTab === "design" && (
           <>
-            <Section label="AI-Generated Concepts" count={4} rightAction={<SmallBtn label={genState.loading ? "Generating..." : "+ Generate New"} primary onClick={() => handleGenerateDesign("concept")} />}>
+            <Section label="AI-Generated Concepts" count={storedGeneratedImages.length} rightAction={<SmallBtn label={genState.loading ? "Generating..." : "+ Generate New"} primary onClick={() => handleGenerateDesign("concept")} />}>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                {genState.imageUrl && <ImageSlot label="AI Generated" hasImage src={genState.imageUrl} />}
-                {[1, 2, 3, 4].map((n) => <ImageSlot key={n} label={`Concept ${n}`} />)}
+                {genState.imageUrl && !storedGeneratedImages.find(i => i.url === genState.imageUrl) && (
+                  <ImageSlot label="New" hasImage src={genState.imageUrl} />
+                )}
+                {storedGeneratedImages.map((img, i) => (
+                  <ImageSlot key={img.url || i} label={`Concept ${i + 1}`} hasImage src={img.url} />
+                ))}
                 <ImageSlot label="Generate" />
               </div>
               {genState.loading && (
@@ -553,22 +558,29 @@ export default function ProjectView({ onBack, projectId }) {
               {genState.error && (
                 <div style={{ marginTop: 12, fontFamily: SANS, fontSize: 12, color: C.coral }}>{genState.error}</div>
               )}
-              <div style={{ marginTop: 16, fontFamily: SANS, fontSize: 12, color: C.light }}>
-                <span style={{ fontFamily: MONO, fontSize: 10, color: C.mid }}>PROMPT:</span> Crown of thorns design, literal depiction, stylized thorn motif, detailed thorns, sharp thorns, 14k yellow gold
-              </div>
+              {storedGeneratedImages.length > 0 && storedGeneratedImages[storedGeneratedImages.length - 1].promptUsed && (
+                <div style={{ marginTop: 16, fontFamily: SANS, fontSize: 12, color: C.light }}>
+                  <span style={{ fontFamily: MONO, fontSize: 10, color: C.mid }}>PROMPT:</span> {storedGeneratedImages[storedGeneratedImages.length - 1].promptUsed}
+                </div>
+              )}
             </Section>
 
             <Section label="Sketches & Drawings" count={(filesByCategory.sketch || []).length} rightAction={<SmallBtn label="+ Upload" onClick={() => triggerUpload("sketch")} />}>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                <ImageSlot label="Sketch 1" />
-                <ImageSlot label="Sketch 2" />
+                {(filesByCategory.sketch || []).map((f) => {
+                  const url = getFileUrl(f);
+                  return <ImageSlot key={f.id} label={f.name} hasImage={!!url} src={url} />;
+                })}
                 <ImageSlot label="Add Sketch" />
               </div>
             </Section>
 
-            <Section label="Photorealistic Renders" count={3} rightAction={<SmallBtn label={genState.loading ? "Generating..." : "+ Render"} primary onClick={() => handleGenerateDesign("render")} />}>
+            <Section label="Photorealistic Renders" count={(filesByCategory.render || []).length} rightAction={<SmallBtn label={genState.loading ? "Generating..." : "+ Render"} primary onClick={() => handleGenerateDesign("render")} />}>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                {["Front View", "Side View", "Detail"].map((v) => <ImageSlot key={v} label={v} />)}
+                {(filesByCategory.render || []).map((f) => {
+                  const url = getFileUrl(f);
+                  return <ImageSlot key={f.id} label={f.name} hasImage={!!url} src={url} />;
+                })}
                 <ImageSlot label="Add Render" />
               </div>
             </Section>

@@ -1092,6 +1092,7 @@ export default function ZipJewelerDashboard() {
   const [activeTool, setActiveTool] = useState(null);
   const [storedProjects, setStoredProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
+  const [showNewProjectModal, setShowNewProjectModal] = useState(false);
 
   // Load projects from storage on mount and when returning to dashboard/projects
   const refreshProjects = useCallback(() => {
@@ -1246,6 +1247,7 @@ export default function ZipJewelerDashboard() {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ fontFamily: SERIF, fontSize: 32, fontWeight: 600, color: C.black, letterSpacing: 5, textTransform: "uppercase" }}>Projects</div>
                 <button
+                  onClick={() => setShowNewProjectModal(true)}
                   style={{
                     fontFamily: SANS, fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase",
                     padding: "10px 24px", background: C.coral, color: C.white, border: "none", borderRadius: RS,
@@ -1287,7 +1289,7 @@ export default function ZipJewelerDashboard() {
         )}
         {activeNav === "products" && <ProductsView />}
         {activeNav === "orders" && <OrdersView />}
-        {activeNav === "imagine" && <ImagineView />}
+        {activeNav === "imagine" && <ImagineView onProjectCreated={(id) => { refreshProjects(); handleNavigate("project-detail", id); }} />}
         {activeNav === "project-detail" && (
           <ProjectView onBack={() => handleNavigate("projects")} projectId={selectedProjectId} />
         )}
@@ -1298,6 +1300,11 @@ export default function ZipJewelerDashboard() {
         <NewProjectModal onClose={() => { setActiveTool(null); refreshProjects(); }} onProjectCreated={(id) => { refreshProjects(); handleNavigate("project-detail", id); }} />
       ) : (
         <ToolModal tool={activeTool} onClose={() => setActiveTool(null)} />
+      )}
+
+      {/* ═══ New Project Modal (from Projects page button) ═══ */}
+      {showNewProjectModal && (
+        <NewProjectModal onClose={() => { setShowNewProjectModal(false); refreshProjects(); }} onProjectCreated={(id) => { setShowNewProjectModal(false); refreshProjects(); handleNavigate("project-detail", id); }} />
       )}
     </div>
   );

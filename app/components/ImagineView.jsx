@@ -251,7 +251,7 @@ function ReadinessMeter({ value }) {
 }
 
 // ─── PROJECT PANEL ───
-function ProjectPanel({ project, readiness, suggestedTool, projectId }) {
+function ProjectPanel({ project, readiness, suggestedTool, projectId, onCreateFolder }) {
   const filledFields = Object.entries(project).filter(([_, v]) => v);
   const totalFields = Object.keys(EMPTY_PROJECT).length;
   const [genState, setGenState] = useState({ loading: false, error: null, imageUrl: null });
@@ -411,7 +411,7 @@ function ProjectPanel({ project, readiness, suggestedTool, projectId }) {
               <ActionBtn icon={"\uD83E\uDDCA"} label="Generate 3D Model" desc="Production-ready CAD file" />
             )}
             {readiness >= 80 && (
-              <ActionBtn icon={"\uD83D\uDCC1"} label="Create Project Folder" desc="Compile complete package" color={C.green} />
+              <ActionBtn icon={"\uD83D\uDCC1"} label="Create Project Folder" desc="Compile complete package" color={C.green} onClick={onCreateFolder} />
             )}
           </div>
         </div>
@@ -491,7 +491,7 @@ function WelcomeScreen() {
 // ═══════════════════════════════════════
 // MAIN IMAGINE VIEW COMPONENT
 // ═══════════════════════════════════════
-export default function ImagineView() {
+export default function ImagineView({ onProjectCreated }) {
   const [loaded, setLoaded] = useState(false);
   const [messages, setMessages] = useState([]); // { role, content, extracted?, suggestedTool?, suggestedToolReason?, fieldUpdates? }
   const [input, setInput] = useState("");
@@ -627,6 +627,18 @@ export default function ImagineView() {
     setIsLoading(false);
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [input, isLoading, conversationHistory, project, readiness]);
+
+  const handleCreateFolder = useCallback(() => {
+    if (!projectId) return;
+    updateProject(projectId, {
+      status: "in-progress",
+      name: project.name || "Untitled Project",
+      type: project.type || null,
+      fields: project,
+      readiness,
+    });
+    if (onProjectCreated) onProjectCreated(projectId);
+  }, [projectId, project, readiness, onProjectCreated]);
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -772,7 +784,7 @@ export default function ImagineView() {
           animation: "slideIn 0.25s ease",
         }}>
           {started ? (
-            <ProjectPanel project={project} readiness={readiness} projectId={projectId} />
+            <ProjectPanel project={project} readiness={readiness} projectId={projectId} onCreateFolder={handleCreateFolder} />
           ) : (
             <div style={{ padding: "40px 20px", textAlign: "center" }}>
               <div style={{ fontFamily: SANS, fontSize: 11, color: C.border, letterSpacing: 2, textTransform: "uppercase" }}>Project folder will<br />appear here</div>
