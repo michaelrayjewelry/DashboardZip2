@@ -15,3 +15,4 @@ export const SANS = "'DM Sans', 'Helvetica Neue', sans-serif";
 export const MONO = "'DM Mono', monospace";
 export const R = 8;
 export const RS = 6;
+export const BASE_PATH = "/DashboardZip2";
