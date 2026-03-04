@@ -493,6 +493,7 @@ export default function ProjectView({ onBack, projectId }) {
   const chatInputRef = useRef(null);
   const [revision, setRevision] = useState(0);
   const [previewImage, setPreviewImage] = useState(null);
+  const [coverPickerOpen, setCoverPickerOpen] = useState(false);
 
   // ─── BOM & Pricing state ───
   const [bom, setBom] = useState(() => {
@@ -877,8 +878,12 @@ export default function ProjectView({ onBack, projectId }) {
         {/* OVERVIEW TAB */}
         {/* ════════════════════════════════════════ */}
         {activeTab === "overview" && (() => {
-          const heroFile = (filesByCategory.render || [])[0] || (filesByCategory.reference || [])[0];
-          const heroUrl = heroFile ? getFileUrl(heroFile) : null;
+          // Resolve cover image: saved cover → first render → first reference
+          const coverField = project.fields.coverImage;
+          const coverFile = coverField ? projectFiles.find((pf) => pf.id === coverField.fileId) : null;
+          const coverUrl = coverFile ? getFileUrl(coverFile) : (coverField?.url || null);
+          const fallbackFile = (filesByCategory.render || [])[0] || (filesByCategory.reference || [])[0];
+          const heroUrl = coverUrl || (fallbackFile ? getFileUrl(fallbackFile) : null);
           const f = project.fields;
           const specs = [
             { label: "Type", value: f.type || "—" },
@@ -892,6 +897,17 @@ export default function ProjectView({ onBack, projectId }) {
             { label: "Budget", value: f.budget || "—" },
             { label: "Timeline", value: f.timeline || "—" },
           ];
+          // Gather all image files + generated images for gallery picker
+          const allImages = [];
+          for (const cat of ["render", "reference", "sketch"]) {
+            (filesByCategory[cat] || []).forEach((file) => {
+              const url = getFileUrl(file);
+              if (url) allImages.push({ fileId: file.id, url, label: file.name });
+            });
+          }
+          (storedGeneratedImages || []).forEach((img, i) => {
+            if (img.url) allImages.push({ fileId: null, url: img.url, label: `AI Concept ${i + 1}` });
+          });
           return (
             <>
               {/* ── Product Card ── */}
@@ -899,19 +915,89 @@ export default function ProjectView({ onBack, projectId }) {
                 display: "flex", gap: 28, padding: 24,
                 background: C.section, borderRadius: R, border: `1px solid ${C.border}`, marginBottom: 14,
               }}>
-                {/* Hero image */}
-                <div style={{
-                  width: 220, height: 220, flexShrink: 0, borderRadius: RS, overflow: "hidden",
-                  background: heroUrl ? `url(${heroUrl}) center/cover` : C.border,
-                  border: `1px solid ${C.border}`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
+                {/* Hero image — click to open gallery picker */}
+                <div
+                  onClick={() => setCoverPickerOpen(true)}
+                  style={{
+                    width: 220, height: 220, flexShrink: 0, borderRadius: RS, overflow: "hidden",
+                    background: heroUrl ? `url(${heroUrl}) center/cover` : C.border,
+                    border: `1px solid ${C.border}`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    cursor: "pointer", position: "relative",
+                  }}
+                >
                   {!heroUrl && (
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={C.light} strokeWidth="1">
-                      <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" />
-                    </svg>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 32, color: C.light, fontWeight: 300, lineHeight: 1 }}>+</span>
+                      <span style={{ fontFamily: SANS, fontSize: 9, color: C.light, letterSpacing: 1.5, textTransform: "uppercase" }}>Set Cover</span>
+                    </div>
+                  )}
+                  {heroUrl && (
+                    <div style={{
+                      position: "absolute", inset: 0,
+                      background: "rgba(0,0,0,0)", transition: "background 0.2s",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.35)"; e.currentTarget.querySelector("span").style.opacity = "1"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0)"; e.currentTarget.querySelector("span").style.opacity = "0"; }}
+                    >
+                      <span style={{ fontSize: 28, color: "#fff", fontWeight: 300, opacity: 0, transition: "opacity 0.2s" }}>+</span>
+                    </div>
                   )}
                 </div>
+
+              {/* ── Cover Image Gallery Picker Modal ── */}
+              {coverPickerOpen && (
+                <div onClick={() => setCoverPickerOpen(false)} style={{
+                  position: "fixed", inset: 0, zIndex: 9998,
+                  background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <div onClick={(e) => e.stopPropagation()} style={{
+                    background: C.white, borderRadius: R, padding: 28, width: 520, maxHeight: "80vh",
+                    overflow: "hidden", display: "flex", flexDirection: "column",
+                    border: `1px solid ${C.border}`,
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+                      <div style={{ fontFamily: SANS, fontSize: 10.5, fontWeight: 600, letterSpacing: 3, textTransform: "uppercase", color: C.label }}>Select Cover Image</div>
+                      <button onClick={() => setCoverPickerOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: C.mid, fontSize: 20, lineHeight: 1 }}>{"\u2715"}</button>
+                    </div>
+                    {allImages.length === 0 ? (
+                      <div style={{ padding: "40px 0", textAlign: "center", fontFamily: SANS, fontSize: 13, color: C.light }}>
+                        No images in project yet. Upload or generate images first.
+                      </div>
+                    ) : (
+                      <div style={{ overflowY: "auto", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+                        {allImages.map((img, i) => (
+                          <div
+                            key={img.fileId || img.url || i}
+                            onClick={() => {
+                              const coverData = { fileId: img.fileId, url: img.url };
+                              saveField("coverImage", coverData);
+                              setCoverPickerOpen(false);
+                            }}
+                            style={{
+                              aspectRatio: "1", borderRadius: RS, overflow: "hidden", cursor: "pointer",
+                              background: `url(${img.url}) center/cover`, border: `2px solid ${C.border}`,
+                              position: "relative", transition: "border-color 0.2s",
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.blue; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; }}
+                          >
+                            <div style={{
+                              position: "absolute", bottom: 0, left: 0, right: 0, padding: "16px 6px 5px",
+                              background: "linear-gradient(transparent, rgba(0,0,0,0.6))",
+                              fontFamily: SANS, fontSize: 9, color: "#fff", letterSpacing: 1,
+                              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                            }}>
+                              {img.label}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
                 {/* Info right */}
                 <div style={{ flex: 1, minWidth: 0 }}>

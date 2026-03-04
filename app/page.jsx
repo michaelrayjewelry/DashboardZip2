@@ -255,6 +255,7 @@ function PrimaryActionCard({ title, sub, onClick, isNavigate }) {
 // ─── Project Row ───
 function ProjectRow({ project, onClick }) {
   const [h, setH] = useState(false);
+  const thumbUrl = project.coverImageUrl || null;
   return (
     <div
       onClick={onClick}
@@ -278,17 +279,20 @@ function ProjectRow({ project, onClick }) {
           width: 44,
           height: 44,
           borderRadius: RS,
-          background: C.border,
+          background: thumbUrl ? `url(${thumbUrl}) center/cover` : C.border,
           flexShrink: 0,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          overflow: "hidden",
         }}
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.light} strokeWidth="1.2">
-          <path d="M6 3h12l4 6-10 13L2 9z" />
-          <path d="M2 9h20" />
-        </svg>
+        {!thumbUrl && (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.light} strokeWidth="1.2">
+            <path d="M6 3h12l4 6-10 13L2 9z" />
+            <path d="M2 9h20" />
+          </svg>
+        )}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
@@ -1011,6 +1015,7 @@ function DashboardContent({ onNavigate, onOpenTool, storedProjects = [] }) {
                 status: p.status || "draft",
                 stage: p.stage || "Concept",
                 time: timeAgo(p.updatedAt),
+                coverImageUrl: p.fields?.coverImage?.url || null,
               }}
               onClick={() => onNavigate("project-detail", p.id)}
             />
@@ -1271,6 +1276,7 @@ export default function ZipJewelerDashboard() {
                         status: p.status || "draft",
                         stage: p.stage || "Concept",
                         time: timeAgo(p.updatedAt),
+                        coverImageUrl: p.fields?.coverImage?.url || null,
                       }}
                       onClick={() => handleNavigate("project-detail", p.id)}
                     />
