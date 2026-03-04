@@ -44,7 +44,7 @@ export async function POST(request) {
       body: JSON.stringify({
         prompt: prompt.trim(),
         aspect_ratio: aspect_ratio || "1:1",
-        resolution: resolution || "2K",
+        resolution: resolution || "1080p",
       }),
     });
 

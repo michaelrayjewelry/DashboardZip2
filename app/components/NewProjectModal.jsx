@@ -494,7 +494,7 @@ AVAILABLE FIELD KEYS: ${allFields.map((f) => f.key).join(", ")}`;
       ]);
 
       try {
-        const result = await generateImage({ prompt, aspectRatio: "1:1", resolution: "2K" });
+        const result = await generateImage({ prompt, aspectRatio: "1:1", resolution: "1080p" });
         if (result.images?.length) {
           const url = result.images[0].url;
           if (projectId) {

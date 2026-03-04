@@ -46,11 +46,11 @@ export async function chatWithClaudeJSON({ system, messages, maxTokens = 1000, f
  * @param {object} opts
  * @param {string} opts.prompt - Text description of the image to generate
  * @param {string} [opts.aspectRatio="1:1"] - Aspect ratio (1:1, 16:9, 9:16, 4:3, 3:4)
- * @param {string} [opts.resolution="2K"] - Resolution (720p, 1K, 2K, 4K)
+ * @param {string} [opts.resolution="1080p"] - Resolution (720p or 1080p)
  * @param {string} [opts.model] - Override the default model (nano-banana-2/text-to-image)
  * @returns {Promise<{ status: string, images: Array<{url: string}>, request_id: string }>}
  */
-export async function generateImage({ prompt, aspectRatio = "1:1", resolution = "2K", model } = {}) {
+export async function generateImage({ prompt, aspectRatio = "1:1", resolution = "1080p", model } = {}) {
   const resp = await fetch("/api/generate-image", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

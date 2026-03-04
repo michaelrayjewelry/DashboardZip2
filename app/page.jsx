@@ -371,7 +371,7 @@ function ToolModal({ tool, onClose }) {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState("");
   const [aspectRatio, setAspectRatio] = useState("1:1");
-  const [resolution, setResolution] = useState("2K");
+  const [resolution, setResolution] = useState("1080p");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImages, setGeneratedImages] = useState([]);
   const [error, setError] = useState(null);
@@ -548,9 +548,7 @@ function ToolModal({ tool, onClose }) {
                       }}
                     >
                       <option value="720p">720p (Fast)</option>
-                      <option value="1K">1K</option>
-                      <option value="2K">2K (Default)</option>
-                      <option value="4K">4K (Best)</option>
+                      <option value="1080p">1080p (Default)</option>
                     </select>
                   </div>
                 </div>

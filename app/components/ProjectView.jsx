@@ -311,7 +311,7 @@ export default function ProjectView({ onBack, projectId }) {
       if (f.finish) parts.push(`${f.finish} finish`);
       const prompt = parts.join(", ");
 
-      const result = await generateImage({ prompt, aspectRatio: "1:1", resolution: "2K" });
+      const result = await generateImage({ prompt, aspectRatio: "1:1", resolution: "1080p" });
       if (result.images?.length) {
         const url = result.images[0].url;
         setGenState({ loading: false, error: null, imageUrl: url });
