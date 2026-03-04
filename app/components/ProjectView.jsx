@@ -9,7 +9,6 @@ import { generateImage, chatWithClaudeJSON } from "../lib/api";
 
 // ─── SYSTEM PROMPTS ───
 
-// Used for projects that originated from Imagine (preserves conversation continuity)
 const IMAGINE_SYSTEM_PROMPT = `You are the ZipJeweler AI Design Consultant — a master jeweler's creative partner embedded inside ZipJeweler, a SaaS platform for custom jewelry production workflow.
 
 Your role is to help jewelers and designers create complete project folders for custom jewelry pieces through natural, warm conversation. You are knowledgeable about jewelry design, manufacturing, gemstones, metals, CAD processes, casting methods, and the full lifecycle of a custom piece.
@@ -24,49 +23,16 @@ CONVERSATION STYLE:
 
 CONTEXT: The user has moved from the Imagine chat into their project folder. Continue the conversation naturally — they may want to refine details, make changes, generate images, or continue building out the project. Do NOT re-introduce yourself or start over.
 
-CORE FLOW — guide the conversation through these areas naturally (not rigidly):
-1. VISION — What's the piece? What's the inspiration? Who's it for?
-2. TYPE & STYLE — Ring, pendant, bracelet, etc. Style era, motifs, mood.
-3. MATERIALS — Metal type, karat, finish. Any gemstones?
-4. DIMENSIONS — Size, weight targets, proportions.
-5. TECHNICAL — Manufacturing notes, special considerations.
-6. BUDGET & TIMELINE — Price range, deadline.
-7. CLIENT — Who's the client? Contact info?
-
-TOOLS — When appropriate, suggest ZipJeweler tools:
-- "Sketch to Jewelry" — when they describe a visual concept
-- "AI Render" — when specs are solid enough to visualize
-- "Cost Estimate" — when materials are discussed
-- "3D Model" — when CAD is needed
-- "File Hub" — when organizing assets
-
 RESPONSE FORMAT:
 You must ALWAYS respond with valid JSON only. No markdown, no backticks, no preamble. Just the JSON object:
 {
   "message": "Your conversational response here",
   "extracted": {
-    "name": "project name if mentioned or you can infer one",
-    "type": "ring|pendant|bracelet|necklace|earrings|brooch|cufflinks|other",
-    "description": "running description of the piece",
-    "metal": "e.g. 14k Yellow Gold",
-    "metalKarat": "e.g. 14k",
-    "finish": "e.g. High Polish, Matte, Brushed, Satin",
-    "mainGemstone": "e.g. 1.5ct Round Diamond",
-    "gemstoneShape": "e.g. Round Brilliant",
-    "settingType": "e.g. Prong, Bezel, Pavé, Channel",
-    "sideStones": "e.g. 0.3ct Pavé Diamonds",
-    "size": "ring size, chain length, etc.",
-    "bandWidth": "e.g. 4mm",
-    "bandStyle": "e.g. Comfort Fit, Knife Edge, Cathedral",
-    "weight": "estimated weight",
-    "budget": "budget range",
-    "timeline": "deadline or timeline",
-    "clientName": "client name",
-    "clientEmail": "client email",
-    "collection": "collection name if mentioned",
-    "designMotif": "e.g. Floral, Art Deco, Serpentine",
-    "castingMethod": "e.g. Lost Wax",
-    "specialNotes": "any special manufacturing or design notes"
+    "name": null, "type": null, "description": null, "metal": null, "metalKarat": null, "finish": null,
+    "mainGemstone": null, "gemstoneShape": null, "settingType": null, "sideStones": null, "size": null,
+    "bandWidth": null, "bandStyle": null, "weight": null, "budget": null, "timeline": null,
+    "clientName": null, "clientEmail": null, "collection": null, "designMotif": null,
+    "castingMethod": null, "specialNotes": null
   },
   "suggestedTool": "sketch|render|estimate|3d|filehub|null",
   "suggestedToolReason": "why this tool would help right now",
@@ -76,13 +42,8 @@ You must ALWAYS respond with valid JSON only. No markdown, no backticks, no prea
 RULES FOR "extracted":
 - Only include fields that have been explicitly mentioned or can be clearly inferred
 - Leave fields as null if not yet discussed
-- Update fields as the conversation evolves — later info overrides earlier
-- The "description" field should be a running summary that gets richer over time
-- "projectReadiness" is your estimate of how complete the project folder is (0-100)
+- Update fields as the conversation evolves — later info overrides earlier`;
 
-Remember: You are building a REAL production project folder. Every detail matters. Guide them to completeness but never force it — some pieces are simple, some are complex.`;
-
-// Used for projects created manually (not from Imagine)
 const PROJECT_SYSTEM_PROMPT = `You are the ZipJeweler AI Design Consultant — a master jeweler's creative partner embedded inside a project folder in ZipJeweler, a SaaS platform for custom jewelry production workflow.
 
 You are chatting inside an EXISTING project folder. The user already has a project with details filled in. Your job is to:
@@ -102,28 +63,11 @@ You must ALWAYS respond with valid JSON only. No markdown, no backticks, no prea
 {
   "message": "Your conversational response here",
   "extracted": {
-    "name": "project name if changed",
-    "type": "ring|pendant|bracelet|necklace|earrings|brooch|cufflinks|other",
-    "description": "updated description",
-    "metal": "e.g. 14k Yellow Gold",
-    "metalKarat": "e.g. 14k",
-    "finish": "e.g. High Polish, Matte, Brushed",
-    "mainGemstone": "e.g. 1.5ct Round Diamond",
-    "gemstoneShape": "e.g. Round Brilliant",
-    "settingType": "e.g. Prong, Bezel, Pavé",
-    "sideStones": "e.g. 0.3ct Pavé Diamonds",
-    "size": "ring size, chain length, etc.",
-    "bandWidth": "e.g. 4mm",
-    "bandStyle": "e.g. Comfort Fit, Knife Edge",
-    "weight": "estimated weight",
-    "budget": "budget range",
-    "timeline": "deadline or timeline",
-    "clientName": "client name",
-    "clientEmail": "client email",
-    "collection": "collection name",
-    "designMotif": "e.g. Floral, Art Deco",
-    "castingMethod": "e.g. Lost Wax",
-    "specialNotes": "special notes"
+    "name": null, "type": null, "description": null, "metal": null, "metalKarat": null, "finish": null,
+    "mainGemstone": null, "gemstoneShape": null, "settingType": null, "sideStones": null, "size": null,
+    "bandWidth": null, "bandStyle": null, "weight": null, "budget": null, "timeline": null,
+    "clientName": null, "clientEmail": null, "collection": null, "designMotif": null,
+    "castingMethod": null, "specialNotes": null
   },
   "suggestedTool": "sketch|render|estimate|3d|filehub|null",
   "suggestedToolReason": "why this tool would help right now"
@@ -131,96 +75,87 @@ You must ALWAYS respond with valid JSON only. No markdown, no backticks, no prea
 
 RULES FOR "extracted":
 - Only include fields that the user explicitly wants to change or that you are suggesting changes for
-- Leave fields as null if not being updated
-- Only suggest field changes when the user asks for them or when it naturally follows from the conversation`;
+- Leave fields as null if not being updated`;
 
 // Hidden system messages that should not appear in the chat display
-const HIDDEN_MSG_PREFIXES = [
-  "Start the conversation",
-  "The user is working on a project called",
-];
+const HIDDEN_MSG_PREFIXES = ["Start the conversation", "The user is working on a project called"];
 function isHiddenMessage(content) {
   return HIDDEN_MSG_PREFIXES.some((p) => content.startsWith(p));
 }
-
-/**
- * Reconstruct display messages from raw conversation history.
- * Extracts fieldUpdates, suggestedTool, etc. from assistant JSON.
- */
 function rebuildDisplayMessages(history) {
   const msgs = [];
   for (const h of history) {
-    if (h.role === "user") {
-      if (!isHiddenMessage(h.content)) {
-        msgs.push({ role: "user", content: h.content });
-      }
+    if (h.role === "user" && !isHiddenMessage(h.content)) {
+      msgs.push({ role: "user", content: h.content });
     } else if (h.role === "assistant") {
       try {
         const parsed = JSON.parse(h.content);
-        // Reconstruct field updates by comparing with previous state
         const fieldUpdates = [];
-        if (parsed.extracted) {
-          Object.entries(parsed.extracted).forEach(([key, val]) => {
-            if (val) fieldUpdates.push({ field: key, value: val });
-          });
-        }
-        msgs.push({
-          role: "assistant",
-          content: parsed.message,
-          fieldUpdates: fieldUpdates.length > 0 ? fieldUpdates : undefined,
-          suggestedTool: parsed.suggestedTool || undefined,
-          suggestedToolReason: parsed.suggestedToolReason || undefined,
-        });
-      } catch {
-        msgs.push({ role: "assistant", content: h.content });
-      }
+        if (parsed.extracted) Object.entries(parsed.extracted).forEach(([k, v]) => { if (v) fieldUpdates.push({ field: k, value: v }); });
+        msgs.push({ role: "assistant", content: parsed.message, fieldUpdates: fieldUpdates.length > 0 ? fieldUpdates : undefined, suggestedTool: parsed.suggestedTool || undefined });
+      } catch { msgs.push({ role: "assistant", content: h.content }); }
     }
   }
   return msgs;
 }
 
-// ─── FIELD CONFIG ───
 const FIELD_LABELS = {
-  name: "Project Name", type: "Jewelry Type", description: "Description",
-  metal: "Metal", metalKarat: "Karat", finish: "Finish",
-  mainGemstone: "Main Gemstone", gemstoneShape: "Gemstone Shape", settingType: "Setting Type",
-  sideStones: "Side Stones", size: "Size", bandWidth: "Band Width",
-  bandStyle: "Band Style", weight: "Est. Weight", budget: "Budget",
-  timeline: "Timeline", clientName: "Client Name", clientEmail: "Client Email",
-  collection: "Collection", designMotif: "Design Motif", castingMethod: "Casting Method",
-  specialNotes: "Special Notes",
-};
-
-const FIELD_GROUPS = {
-  "Details": ["name", "type", "description", "collection", "designMotif"],
-  "Materials": ["metal", "metalKarat", "finish"],
-  "Gemstones": ["mainGemstone", "gemstoneShape", "settingType", "sideStones"],
-  "Dimensions": ["size", "bandWidth", "bandStyle", "weight"],
-  "Production": ["castingMethod", "specialNotes", "budget", "timeline"],
-  "Client": ["clientName", "clientEmail"],
+  name: "Project Name", type: "Jewelry Type", description: "Description", metal: "Metal", metalKarat: "Karat",
+  finish: "Finish", mainGemstone: "Main Gemstone", gemstoneShape: "Gemstone Shape", settingType: "Setting Type",
+  sideStones: "Side Stones", size: "Size", bandWidth: "Band Width", bandStyle: "Band Style", weight: "Est. Weight",
+  budget: "Budget", timeline: "Timeline", clientName: "Client Name", clientEmail: "Client Email",
+  collection: "Collection", designMotif: "Design Motif", castingMethod: "Casting Method", specialNotes: "Special Notes",
 };
 
 const TOOL_INFO = {
-  sketch: { icon: "\u270F\uFE0F", label: "Sketch to Jewelry", desc: "Convert concept into a photorealistic jewelry image" },
-  render: { icon: "\uD83D\uDDBC", label: "AI Render", desc: "Generate a studio-quality render of the piece" },
-  estimate: { icon: "\uD83D\uDCB0", label: "Cost Estimate", desc: "Calculate material and labor costs" },
-  "3d": { icon: "\uD83E\uDDCA", label: "3D Model Gen", desc: "Generate a production-ready 3D model" },
-  filehub: { icon: "\uD83D\uDCC1", label: "File Hub", desc: "Organize all project assets" },
+  sketch: { icon: "\u270F\uFE0F", label: "Sketch to Jewelry" },
+  render: { icon: "\uD83D\uDDBC", label: "AI Render" },
+  estimate: { icon: "\uD83D\uDCB0", label: "Cost Estimate" },
+  "3d": { icon: "\uD83E\uDDCA", label: "3D Model Gen" },
+  filehub: { icon: "\uD83D\uDCC1", label: "File Hub" },
 };
 
-// ─── PIPELINE STAGES ───
-const PIPELINE = [
-  { key: "concept", label: "Concept", icon: "\uD83D\uDCA1" },
-  { key: "design", label: "Design", icon: "\u270F\uFE0F" },
-  { key: "cad", label: "CAD", icon: "\uD83D\uDCD0" },
-  { key: "approval", label: "Approval", icon: "\u2713" },
-  { key: "casting", label: "Casting", icon: "\uD83D\uDD25" },
-  { key: "setting", label: "Setting", icon: "\uD83D\uDC8E" },
-  { key: "finishing", label: "Finishing", icon: "\u2728" },
-  { key: "delivery", label: "Delivery", icon: "\uD83D\uDCE6" },
-];
+// ─── CHAT SUB-COMPONENTS ───
 
-// ─── SHARED SUB-COMPONENTS ───
+function AIChatMessage({ message, isUser }) {
+  return (
+    <div style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start", padding: "4px 0", gap: 8, alignItems: "flex-start" }}>
+      {!isUser && (
+        <div style={{ width: 22, height: 22, borderRadius: 11, background: C.sidebarBg, flexShrink: 0, marginTop: 4, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: SERIF, fontSize: 9, color: C.sidebarActive, fontWeight: 700 }}>Z</div>
+      )}
+      <div style={{ maxWidth: isUser ? "85%" : "90%", padding: "8px 12px", borderRadius: isUser ? `${RS}px ${RS}px 3px ${RS}px` : `${RS}px ${RS}px ${RS}px 3px`, background: isUser ? C.sidebarBg : C.white, border: isUser ? "none" : `1px solid ${C.border}` }}>
+        <div style={{ fontFamily: SANS, fontSize: 12, lineHeight: 1.6, color: isUser ? "#E0E0D8" : C.dark, whiteSpace: "pre-wrap" }}>{message}</div>
+      </div>
+    </div>
+  );
+}
+
+function TypingDots() {
+  return (
+    <div style={{ display: "flex", gap: 4, padding: "4px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ width: 22, height: 22, borderRadius: 11, background: C.sidebarBg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: SERIF, fontSize: 9, color: C.sidebarActive, fontWeight: 700 }}>Z</div>
+        <div style={{ display: "flex", gap: 3, padding: "8px 10px", background: C.section, borderRadius: RS, border: `1px solid ${C.border}` }}>
+          {[0, 1, 2].map((i) => (<div key={i} style={{ width: 4, height: 4, borderRadius: 2, background: C.light, animation: `dotPulse 1.2s ease-in-out ${i * 0.15}s infinite` }} />))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FieldUpdateToast({ field, value }) {
+  return (
+    <div style={{ padding: "2px 0 2px 30px" }}>
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 10px", background: C.greenBg, border: `1px solid ${C.greenBorder}`, borderRadius: 20 }}>
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.5"><path d="M20 6L9 17l-5-5" /></svg>
+        <span style={{ fontFamily: SANS, fontSize: 9, color: C.green, fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase" }}>{FIELD_LABELS[field] || field}</span>
+        <span style={{ fontFamily: SANS, fontSize: 10, color: C.mid }}>{"\u2192"} {value}</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── SHARED COMPONENTS ───
 
 function SectionLabel({ children }) {
   return (
@@ -261,51 +196,56 @@ function Section({ label, children, style = {}, rightAction, collapsed, onToggle
   );
 }
 
-function Pill({ label, color, bg, border, small }) {
+function Field({ label, value = "", wide, textarea, readOnly, mono }) {
+  return (
+    <div style={{ flex: wide ? "1 1 100%" : "1 1 calc(50% - 16px)", minWidth: wide ? "100%" : 180 }}>
+      <div style={{ fontFamily: SANS, fontSize: 9.5, fontWeight: 600, letterSpacing: 2.5, textTransform: "uppercase", color: C.label, marginBottom: 4 }}>{label}</div>
+      {textarea ? (
+        <textarea defaultValue={value} readOnly={readOnly} rows={3} style={{
+          width: "100%", padding: "8px 2px", fontFamily: mono ? MONO : SANS, fontSize: 13, color: C.dark,
+          background: "transparent", border: "none", borderBottom: `1px solid ${C.borderInput}`,
+          outline: "none", resize: "vertical", lineHeight: 1.6, borderRadius: 0,
+        }} />
+      ) : (
+        <input defaultValue={value} readOnly={readOnly} style={{
+          width: "100%", padding: "8px 2px", fontFamily: mono ? MONO : SANS, fontSize: 13, color: C.dark,
+          background: "transparent", border: "none", borderBottom: `1px solid ${C.borderInput}`,
+          outline: "none", borderRadius: 0,
+        }} />
+      )}
+    </div>
+  );
+}
+
+function InfoField({ label, value }) {
+  return (
+    <div style={{ minWidth: 110 }}>
+      <div style={{ fontFamily: SANS, fontSize: 9.5, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase", color: C.label, marginBottom: 3 }}>{label}</div>
+      <div style={{ fontFamily: SANS, fontSize: 13, color: C.dark, fontWeight: 500 }}>{value || "—"}</div>
+    </div>
+  );
+}
+
+function Pill({ label, color, bg, border }) {
   return (
     <span style={{
-      fontFamily: SANS, fontSize: small ? 9 : 9.5, fontWeight: 600, letterSpacing: small ? 1.5 : 2, textTransform: "uppercase",
-      padding: small ? "3px 8px" : "4px 12px", borderRadius: RS, color, background: bg, border: `1px solid ${border}`,
-      display: "inline-block",
+      fontFamily: SANS, fontSize: 9.5, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase",
+      padding: "4px 12px", borderRadius: RS, color, background: bg, border: `1px solid ${border}`,
     }}>{label}</span>
   );
 }
 
-function SmallBtn({ label, onClick, primary, icon, disabled }) {
+function SmallBtn({ label, onClick, primary, icon }) {
   const [h, setH] = useState(false);
   return (
-    <button onClick={disabled ? undefined : onClick} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{
+    <button onClick={onClick} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{
       fontFamily: SANS, fontSize: 10, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase",
       padding: icon ? "7px 14px" : "7px 18px", display: "inline-flex", alignItems: "center", gap: 6,
       background: primary ? C.coral : C.white, color: primary ? C.white : C.mid,
       border: primary ? "none" : `1px solid ${h ? C.borderHover : C.border}`,
-      borderRadius: RS, cursor: disabled ? "default" : "pointer", transition: "all 0.2s",
-      opacity: disabled ? 0.5 : 1,
-      ...(primary && h && !disabled ? { background: C.coralHover } : {}),
+      borderRadius: RS, cursor: "pointer", transition: "all 0.2s",
+      ...(primary && h ? { background: C.coralHover } : {}),
     }}>{icon}{label}</button>
-  );
-}
-
-function ImageSlot({ label, hasImage, src, large, onClick }) {
-  const [h, setH] = useState(false);
-  const size = large ? 280 : 160;
-  return (
-    <div onClick={onClick} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{
-      width: size, height: size, borderRadius: RS, overflow: "hidden",
-      background: hasImage ? `url(${src}) center/cover` : (h ? C.white : C.border),
-      border: `1px solid ${h ? C.borderHover : C.border}`,
-      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-      cursor: "pointer", transition: "all 0.2s", position: "relative", flexShrink: 0,
-    }}>
-      {!hasImage && (
-        <>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.light} strokeWidth="1.2" style={{ marginBottom: 6 }}>
-            <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" />
-          </svg>
-          <span style={{ fontFamily: SANS, fontSize: 9.5, color: C.light, letterSpacing: 1.5, textTransform: "uppercase" }}>{label}</span>
-        </>
-      )}
-    </div>
   );
 }
 
@@ -338,85 +278,53 @@ function FileCard({ name, type, size, date, status }) {
   );
 }
 
-// ─── EDITABLE FIELD ───
-function EditableField({ label, value, fieldKey, onChange, wide, textarea, mono, select, options }) {
-  const [editing, setEditing] = useState(false);
-  const [localVal, setLocalVal] = useState(value || "");
-  const inputRef = useRef(null);
-
-  useEffect(() => { setLocalVal(value || ""); }, [value]);
-  useEffect(() => { if (editing && inputRef.current) inputRef.current.focus(); }, [editing]);
-
-  const commit = () => {
-    setEditing(false);
-    if (localVal !== (value || "")) {
-      onChange(fieldKey, localVal);
-    }
-  };
-
-  const sharedStyle = {
-    width: "100%", padding: "8px 2px", fontFamily: mono ? MONO : SANS, fontSize: 13, color: C.dark,
-    background: editing ? "rgba(200,216,160,0.08)" : "transparent",
-    border: "none", borderBottom: `1px solid ${editing ? C.sidebarActive : C.borderInput}`,
-    outline: "none", borderRadius: 0, transition: "all 0.2s",
-  };
-
-  if (select && !editing) {
-    return (
-      <div style={{ flex: wide ? "1 1 100%" : "1 1 calc(50% - 16px)", minWidth: wide ? "100%" : 180 }}>
-        <div style={{ fontFamily: SANS, fontSize: 9.5, fontWeight: 600, letterSpacing: 2.5, textTransform: "uppercase", color: C.label, marginBottom: 4 }}>{label}</div>
-        <select
-          value={localVal}
-          onChange={(e) => { setLocalVal(e.target.value); onChange(fieldKey, e.target.value); }}
-          style={{ ...sharedStyle, cursor: "pointer", appearance: "auto" }}
-        >
-          <option value="">—</option>
-          {options.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
-      </div>
-    );
-  }
-
+function TimelineItem({ icon, title, detail, time, accent }) {
   return (
-    <div style={{ flex: wide ? "1 1 100%" : "1 1 calc(50% - 16px)", minWidth: wide ? "100%" : 180 }}>
-      <div style={{ fontFamily: SANS, fontSize: 9.5, fontWeight: 600, letterSpacing: 2.5, textTransform: "uppercase", color: C.label, marginBottom: 4 }}>{label}</div>
-      {textarea ? (
-        <textarea
-          ref={inputRef}
-          value={localVal}
-          onChange={(e) => setLocalVal(e.target.value)}
-          onFocus={() => setEditing(true)}
-          onBlur={commit}
-          rows={3}
-          style={{ ...sharedStyle, resize: "vertical", lineHeight: 1.6 }}
-          placeholder="Click to edit..."
-        />
-      ) : (
-        <input
-          ref={inputRef}
-          value={localVal}
-          onChange={(e) => setLocalVal(e.target.value)}
-          onFocus={() => setEditing(true)}
-          onBlur={commit}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.target.blur(); } }}
-          style={sharedStyle}
-          placeholder="Click to edit..."
-        />
-      )}
+    <div style={{ display: "flex", gap: 14, padding: "10px 0" }}>
+      <div style={{
+        width: 28, height: 28, borderRadius: 14, flexShrink: 0, marginTop: 2,
+        background: accent ? `${accent}0C` : C.white, border: `1px solid ${accent ? `${accent}20` : C.border}`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 12,
+      }}>{icon}</div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontFamily: SANS, fontSize: 12.5, fontWeight: 500, color: C.dark }}>{title}</div>
+        {detail && <div style={{ fontFamily: SANS, fontSize: 12, color: C.light, marginTop: 2 }}>{detail}</div>}
+      </div>
+      <span style={{ fontFamily: MONO, fontSize: 10, color: C.light, flexShrink: 0, marginTop: 3 }}>{time}</span>
     </div>
   );
 }
 
-// ─── STATUS PILL ───
-const STATUS_COLORS = {
-  draft: { color: C.light, bg: C.section, border: C.border },
-  "in-progress": { color: C.blue, bg: C.blueBg, border: C.blueBorder },
-  review: { color: C.amber, bg: C.amberBg, border: C.amberBorder },
-  complete: { color: C.green, bg: C.greenBg, border: C.greenBorder },
-};
+function ChatBubble({ from, message, time, isMe }) {
+  return (
+    <div style={{ display: "flex", justifyContent: isMe ? "flex-end" : "flex-start", marginBottom: 10 }}>
+      <div style={{
+        maxWidth: "70%", padding: "12px 16px", borderRadius: R,
+        background: isMe ? C.sidebarBg : C.white,
+        border: isMe ? "none" : `1px solid ${C.border}`,
+      }}>
+        {!isMe && <div style={{ fontFamily: SANS, fontSize: 10, fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase", color: C.blue, marginBottom: 4 }}>{from}</div>}
+        <div style={{ fontFamily: SANS, fontSize: 13, color: isMe ? "#D4D4CC" : C.dark, lineHeight: 1.6 }}>{message}</div>
+        <div style={{ fontFamily: MONO, fontSize: 9, color: isMe ? "#8A8A7E" : C.light, marginTop: 6, textAlign: "right" }}>{time}</div>
+      </div>
+    </div>
+  );
+}
 
-// ─── PIPELINE BAR ───
-function PipelineBar({ current, onChange }) {
+// ─── PIPELINE STAGES ───
+const PIPELINE = [
+  { key: "concept", label: "Concept", icon: "💡" },
+  { key: "design", label: "Design", icon: "✏️" },
+  { key: "cad", label: "CAD", icon: "📐" },
+  { key: "approval", label: "Approval", icon: "✓" },
+  { key: "casting", label: "Casting", icon: "🔥" },
+  { key: "setting", label: "Setting", icon: "💎" },
+  { key: "finishing", label: "Finishing", icon: "✨" },
+  { key: "delivery", label: "Delivery", icon: "📦" },
+];
+
+function PipelineBar({ current }) {
   const idx = PIPELINE.findIndex((p) => p.key === current);
   return (
     <div style={{ display: "flex", gap: 2, alignItems: "stretch" }}>
@@ -424,7 +332,7 @@ function PipelineBar({ current, onChange }) {
         const done = i < idx;
         const active = i === idx;
         return (
-          <div key={stage.key} onClick={() => onChange(stage.key)} style={{
+          <div key={stage.key} style={{
             flex: 1, textAlign: "center", padding: "10px 4px 8px",
             background: done ? C.greenBg : active ? C.blueBg : "transparent",
             border: `1px solid ${done ? C.greenBorder : active ? C.blueBorder : C.border}`,
@@ -444,87 +352,81 @@ function PipelineBar({ current, onChange }) {
   );
 }
 
-// ─── CHAT MESSAGE (in-project bot) ───
-function ChatMessage({ message, isUser }) {
+// ─── MATERIAL ROW ───
+function MaterialRow({ name, spec, qty, unit, unitCost, total }) {
   return (
     <div style={{
-      display: "flex", justifyContent: isUser ? "flex-end" : "flex-start",
-      padding: "4px 0", gap: 8, alignItems: "flex-start",
+      display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr 1fr",
+      gap: 8, padding: "10px 0", borderBottom: `1px solid ${C.border}`,
+      fontFamily: SANS, fontSize: 12.5, color: C.dark, alignItems: "center",
     }}>
-      {!isUser && (
-        <div style={{
-          width: 24, height: 24, borderRadius: 12, background: C.sidebarBg, flexShrink: 0, marginTop: 4,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: SERIF, fontSize: 10, color: C.sidebarActive, fontWeight: 700,
-        }}>Z</div>
-      )}
-      <div style={{
-        maxWidth: isUser ? "80%" : "85%", padding: "10px 14px",
-        borderRadius: isUser ? `${R}px ${R}px 4px ${R}px` : `${R}px ${R}px ${R}px 4px`,
-        background: isUser ? C.sidebarBg : C.white,
-        border: isUser ? "none" : `1px solid ${C.border}`,
-      }}>
-        <div style={{
-          fontFamily: SANS, fontSize: 12.5, lineHeight: 1.65,
-          color: isUser ? "#E0E0D8" : C.dark, whiteSpace: "pre-wrap",
-        }}>{message}</div>
-      </div>
-    </div>
-  );
-}
-
-function TypingDots() {
-  return (
-    <div style={{ display: "flex", gap: 4, padding: "4px 0" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{
-          width: 24, height: 24, borderRadius: 12, background: C.sidebarBg,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: SERIF, fontSize: 10, color: C.sidebarActive, fontWeight: 700,
-        }}>Z</div>
-        <div style={{ display: "flex", gap: 3, padding: "8px 12px", background: C.section, borderRadius: R, border: `1px solid ${C.border}` }}>
-          {[0, 1, 2].map((i) => (
-            <div key={i} style={{
-              width: 5, height: 5, borderRadius: 3, background: C.light,
-              animation: `dotPulse 1.2s ease-in-out ${i * 0.15}s infinite`,
-            }} />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FieldUpdateToast({ field, value }) {
-  return (
-    <div style={{ padding: "2px 0 2px 32px" }}>
-      <div style={{
-        display: "inline-flex", alignItems: "center", gap: 8, padding: "4px 12px",
-        background: C.greenBg, border: `1px solid ${C.greenBorder}`, borderRadius: 20,
-      }}>
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.5">
-          <path d="M20 6L9 17l-5-5" />
-        </svg>
-        <span style={{ fontFamily: SANS, fontSize: 9.5, color: C.green, fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase" }}>
-          {FIELD_LABELS[field] || field}
-        </span>
-        <span style={{ fontFamily: SANS, fontSize: 10.5, color: C.mid }}>{"\u2192"} {value}</span>
-      </div>
+      <span style={{ fontWeight: 500 }}>{name}</span>
+      <span style={{ color: C.mid }}>{spec}</span>
+      <span style={{ fontFamily: MONO, textAlign: "right" }}>{qty}</span>
+      <span style={{ color: C.light }}>{unit}</span>
+      <span style={{ fontFamily: MONO, textAlign: "right" }}>${unitCost}</span>
+      <span style={{ fontFamily: MONO, textAlign: "right", fontWeight: 600 }}>${total}</span>
     </div>
   );
 }
 
 // ─── TABS ───
-const TABS = [
-  { key: "overview", label: "Overview" },
-  { key: "specs", label: "Specifications" },
-  { key: "assets", label: "Assets & Files" },
-  { key: "ai", label: "AI Assistant" },
-];
+function TabBar({ tabs, active, onSelect }) {
+  return (
+    <div style={{
+      display: "flex", gap: 0, borderBottom: `1px solid ${C.border}`, marginBottom: 20,
+      overflowX: "auto",
+    }}>
+      {tabs.map((tab) => (
+        <button key={tab.key} onClick={() => onSelect(tab.key)} style={{
+          fontFamily: SANS, fontSize: 11, fontWeight: active === tab.key ? 600 : 400,
+          letterSpacing: 2, textTransform: "uppercase", padding: "14px 20px",
+          color: active === tab.key ? C.black : C.light, background: "none", border: "none",
+          borderBottom: active === tab.key ? `2px solid ${C.black}` : "2px solid transparent",
+          cursor: "pointer", transition: "all 0.2s", whiteSpace: "nowrap",
+        }}>{tab.label}</button>
+      ))}
+    </div>
+  );
+}
+
+// ─── IMAGE SLOT ───
+function ImageSlot({ label, hasImage, src }) {
+  const [h, setH] = useState(false);
+  return (
+    <div onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{
+      width: 160, height: 160, borderRadius: RS, overflow: "hidden",
+      background: hasImage ? `url(${src}) center/cover` : (h ? C.white : C.border),
+      border: `1px solid ${h ? C.borderHover : C.border}`,
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      cursor: "pointer", transition: "all 0.2s", position: "relative",
+    }}>
+      {!hasImage && (
+        <>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.light} strokeWidth="1.2" style={{ marginBottom: 6 }}>
+            <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" />
+          </svg>
+          <span style={{ fontFamily: SANS, fontSize: 9.5, color: C.light, letterSpacing: 1.5, textTransform: "uppercase" }}>{label}</span>
+        </>
+      )}
+    </div>
+  );
+}
 
 // ═══════════════════════════════════════
 // PROJECT VIEW – MAIN COMPONENT
 // ═══════════════════════════════════════
+const TABS = [
+  { key: "overview", label: "Overview" },
+  { key: "design", label: "Design & Assets" },
+  { key: "specs", label: "Specifications" },
+  { key: "materials", label: "Materials & Cost" },
+  { key: "manufacturing", label: "Manufacturing" },
+  { key: "communication", label: "Communication" },
+  { key: "documents", label: "Documents" },
+  { key: "timeline", label: "Timeline" },
+];
+
 export default function ProjectView({ onBack, projectId }) {
   const [activeTab, setActiveTab] = useState("overview");
   const [loaded, setLoaded] = useState(false);
@@ -534,71 +436,77 @@ export default function ProjectView({ onBack, projectId }) {
   const uploadRef = useRef(null);
   const [uploadContext, setUploadContext] = useState("reference");
   const [genState, setGenState] = useState({ loading: false, error: null, imageUrl: null });
-  const [fields, setFields] = useState({});
-  const [projectName, setProjectName] = useState("");
-  const [projectStatus, setProjectStatus] = useState("draft");
-  const [projectStage, setProjectStage] = useState("concept");
-  const [heroImage, setHeroImage] = useState(null);
+  const toggle = (k) => setCollapse((s) => ({ ...s, [k]: !s[k] }));
 
-  // AI Chat state
+  // ─── AI Chat state ───
+  const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [conversationHistory, setConversationHistory] = useState([]);
-  const [chatSource, setChatSource] = useState(null); // "imagine" or null
+  const [chatSource, setChatSource] = useState(null);
+  const [chatStarted, setChatStarted] = useState(false);
   const chatEndRef = useRef(null);
   const chatInputRef = useRef(null);
 
-  const toggle = (k) => setCollapse((s) => ({ ...s, [k]: !s[k] }));
+  const handleGenerateDesign = async (style) => {
+    if (genState.loading) return;
+    setGenState({ loading: true, error: null, imageUrl: null });
+    try {
+      const f = project.fields;
+      // Build a structured prompt for consistent perspective jewelry renders
+      const envParts = [
+        "Photorealistic studio product photograph",
+        "three-quarter perspective view of a single jewelry piece",
+        "centered on clean white background",
+        "professional jewelry photography lighting with soft shadows",
+        "high-end e-commerce product shot",
+      ];
+      const pieceParts = [];
+      const jewelryType = f.type || "jewelry piece";
+      pieceParts.push(jewelryType);
+      if (f.name || project.name) pieceParts.push(`called "${f.name || project.name}"`);
+      if (f.description) pieceParts.push(f.description);
+      if (f.metal && f.metalKarat) pieceParts.push(`made of ${f.metalKarat} ${f.metal}`);
+      else if (f.metal) pieceParts.push(`made of ${f.metal}`);
+      if (f.finish) pieceParts.push(`${f.finish} finish`);
+      if (f.mainGemstone) pieceParts.push(`featuring ${f.mainGemstone}`);
+      if (f.gemstoneShape) pieceParts.push(`${f.gemstoneShape} cut`);
+      if (f.settingType) pieceParts.push(`${f.settingType} setting`);
+      if (f.sideStones) pieceParts.push(`with ${f.sideStones}`);
+      if (f.designMotif) pieceParts.push(`${f.designMotif} design motif`);
+      if (f.bandStyle) pieceParts.push(`${f.bandStyle} band`);
+      const prompt = envParts.join(", ") + ". " + pieceParts.join(", ");
+
+      const result = await generateImage({ prompt, aspectRatio: "1:1", resolution: "1080p" });
+      if (result.images?.length) {
+        const url = result.images[0].url;
+        setGenState({ loading: false, error: null, imageUrl: url });
+        if (projectId) {
+          saveGeneratedImageToProject(projectId, url, style === "render" ? "render" : "imagine-sketch", prompt);
+          setProjectFiles(getProjectFiles(projectId));
+        }
+      } else {
+        setGenState({ loading: false, error: "No images were returned. Please try again.", imageUrl: null });
+      }
+    } catch (err) {
+      setGenState({ loading: false, error: err.message, imageUrl: null });
+    }
+  };
 
   useEffect(() => { setTimeout(() => setLoaded(true), 50); }, []);
 
-  // Load project data
+  // Load project data from storage
   const storedProject = projectId ? getProject(projectId) : null;
 
+  // Load files from storage
   useEffect(() => {
-    if (storedProject) {
-      setFields(storedProject.fields || {});
-      setProjectName(storedProject.name || "Untitled Project");
-      setProjectStatus(storedProject.status || "draft");
-      setProjectStage(storedProject.stage || "concept");
-      setChatSource(storedProject.chatSource || null);
-      // Load existing chat history and fully reconstruct display messages
-      const history = getChatHistory(projectId);
-      if (history && history.length > 0) {
-        setConversationHistory(history);
-        setChatMessages(rebuildDisplayMessages(history));
-      }
+    if (projectId) {
+      setProjectFiles(getProjectFiles(projectId));
     }
   }, [projectId]);
 
-  // Load files
-  useEffect(() => {
-    if (projectId) setProjectFiles(getProjectFiles(projectId));
-  }, [projectId]);
-
-  // Determine hero image (first reference, render, or generated image)
-  useEffect(() => {
-    const findHero = async () => {
-      const cats = getProjectFilesByCategory(projectId);
-      const candidates = [...(cats.reference || []), ...(cats.render || []), ...(cats.sketch || [])];
-      // Also check generated images
-      const genImages = storedProject?.generatedImages || [];
-
-      for (const f of candidates) {
-        const url = f.url || (f.blobKey ? await getFileBlobURL(f.blobKey) : null);
-        if (url) { setHeroImage(url); return; }
-      }
-      if (genImages.length > 0) {
-        setHeroImage(genImages[genImages.length - 1].url);
-        return;
-      }
-      setHeroImage(null);
-    };
-    if (projectId) findHero();
-  }, [projectId, projectFiles]);
-
-  // Generate blob URLs
+  // Generate blob URLs for uploaded files
   useEffect(() => {
     const loadUrls = async () => {
       const urls = {};
@@ -613,42 +521,12 @@ export default function ProjectView({ onBack, projectId }) {
       setFileUrls(urls);
     };
     if (projectFiles.length > 0) loadUrls();
-    return () => { Object.values(fileUrls).forEach(URL.revokeObjectURL); };
+    return () => {
+      // Revoke URLs on cleanup
+      Object.values(fileUrls).forEach(URL.revokeObjectURL);
+    };
   }, [projectFiles]);
 
-  // Scroll chat
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages, chatLoading]);
-
-  // ─── Field change handler (auto-save) ───
-  const handleFieldChange = useCallback((key, value) => {
-    setFields((prev) => {
-      const next = { ...prev, [key]: value };
-      if (projectId) {
-        const updates = { fields: next };
-        if (key === "name") updates.name = value;
-        updateProject(projectId, updates);
-      }
-      return next;
-    });
-    if (key === "name") setProjectName(value);
-  }, [projectId]);
-
-  const handleStatusChange = useCallback((status) => {
-    setProjectStatus(status);
-    if (projectId) updateProject(projectId, { status });
-  }, [projectId]);
-
-  const handleStageChange = useCallback((stage) => {
-    setProjectStage(stage);
-    if (projectId) updateProject(projectId, { stage });
-  }, [projectId]);
-
-  const handleNameChange = useCallback((name) => {
-    setProjectName(name);
-    if (projectId) updateProject(projectId, { name });
-  }, [projectId]);
-
-  // ─── File operations ───
   const handleFileUpload = async (files, source) => {
     if (!projectId) return;
     for (const file of files) {
@@ -662,91 +540,63 @@ export default function ProjectView({ onBack, projectId }) {
     uploadRef.current?.click();
   };
 
-  // ─── Image generation ───
-  const handleGenerateDesign = async (style) => {
-    if (genState.loading) return;
-    setGenState({ loading: true, error: null, imageUrl: null });
-    try {
-      const parts = [];
-      if (style === "render") {
-        parts.push("Photorealistic studio product photograph, white background, professional jewelry lighting");
-      } else {
-        parts.push("Photorealistic custom jewelry product photo, studio lighting, white background");
+  // ─── Load chat history from storage ───
+  useEffect(() => {
+    if (storedProject) {
+      setChatSource(storedProject.chatSource || null);
+      const history = getChatHistory(projectId);
+      if (history && history.length > 0) {
+        setConversationHistory(history);
+        setChatMessages(rebuildDisplayMessages(history));
+        setChatStarted(true);
+        setChatOpen(true); // auto-open if there's existing chat
       }
-      if (fields.type) parts.push(fields.type);
-      if (fields.name || projectName) parts.push(fields.name || projectName);
-      if (fields.description) parts.push(fields.description);
-      if (fields.metal) parts.push(`made of ${fields.metal}`);
-      if (fields.metalKarat) parts.push(fields.metalKarat);
-      if (fields.mainGemstone) parts.push(`featuring ${fields.mainGemstone}`);
-      if (fields.designMotif) parts.push(`${fields.designMotif} design motif`);
-      if (fields.finish) parts.push(`${fields.finish} finish`);
-      const prompt = parts.join(", ");
-
-      const result = await generateImage({ prompt, aspectRatio: "1:1", resolution: "1080p" });
-      if (result.images?.length) {
-        const url = result.images[0].url;
-        setGenState({ loading: false, error: null, imageUrl: url });
-        setHeroImage(url);
-        if (projectId) {
-          saveGeneratedImageToProject(projectId, url, style === "render" ? "render" : "imagine-sketch", prompt);
-          setProjectFiles(getProjectFiles(projectId));
-        }
-      } else {
-        setGenState({ loading: false, error: "No images were returned. Please try again.", imageUrl: null });
-      }
-    } catch (err) {
-      setGenState({ loading: false, error: err.message, imageUrl: null });
     }
-  };
+  }, [projectId]);
 
-  // ─── AI Chat (in-project Imagine bot) ───
-  // Use Imagine prompt for projects that originated from Imagine, otherwise use the project prompt
-  const getSystemPrompt = useCallback(() => {
-    return chatSource === "imagine" ? IMAGINE_SYSTEM_PROMPT : PROJECT_SYSTEM_PROMPT;
-  }, [chatSource]);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages, chatLoading]);
 
-  const buildContextMessage = () => {
-    const filledFields = Object.entries(fields).filter(([_, v]) => v);
-    if (filledFields.length === 0) return "";
-    return "\n\n[CURRENT PROJECT STATE]\n" + filledFields.map(([k, v]) => `${FIELD_LABELS[k] || k}: ${v}`).join("\n");
-  };
+  const getSystemPrompt = useCallback(() => chatSource === "imagine" ? IMAGINE_SYSTEM_PROMPT : PROJECT_SYSTEM_PROMPT, [chatSource]);
+
+  const buildContextMessage = useCallback(() => {
+    const sp = storedProject;
+    if (!sp || !sp.fields) return "";
+    const filled = Object.entries(sp.fields).filter(([_, v]) => v);
+    if (filled.length === 0) return "";
+    return "\n\n[CURRENT PROJECT STATE]\n" + filled.map(([k, v]) => `${FIELD_LABELS[k] || k}: ${v}`).join("\n");
+  }, [storedProject]);
 
   const startChat = useCallback(async () => {
-    if (chatMessages.length > 0) return; // Already has messages (loaded from history or started)
+    if (chatStarted) return;
+    setChatStarted(true);
     setChatLoading(true);
     try {
-      const contextMsg = `The user is working on a project called "${projectName}". Here are the current project details:${buildContextMessage()}\n\nGreet them briefly and ask how you can help with this project.`;
+      const name = storedProject?.name || "Untitled Project";
+      const contextMsg = `The user is working on a project called "${name}". Here are the current project details:${buildContextMessage()}\n\nGreet them briefly and ask how you can help with this project.`;
       const parsed = await chatWithClaudeJSON({
         system: getSystemPrompt(),
         messages: [{ role: "user", content: contextMsg }],
         maxTokens: 800,
         fallback: { extracted: {}, suggestedTool: null },
       });
-      const aiMsg = { role: "assistant", content: parsed.message || "How can I help with this project?" };
-      setChatMessages([aiMsg]);
-      const history = [
-        { role: "user", content: contextMsg },
-        { role: "assistant", content: JSON.stringify(parsed) },
-      ];
-      setConversationHistory(history);
-      if (projectId) saveChatHistory(projectId, history);
+      setChatMessages([{ role: "assistant", content: parsed.message || "How can I help with this project?" }]);
+      const hist = [{ role: "user", content: contextMsg }, { role: "assistant", content: JSON.stringify(parsed) }];
+      setConversationHistory(hist);
+      if (projectId) saveChatHistory(projectId, hist);
     } catch {
       setChatMessages([{ role: "assistant", content: "How can I help refine this project?" }]);
     }
     setChatLoading(false);
-  }, [projectName, fields, chatMessages.length, projectId, getSystemPrompt]);
+    setTimeout(() => chatInputRef.current?.focus(), 100);
+  }, [chatStarted, storedProject, projectId, getSystemPrompt, buildContextMessage]);
 
   const sendChatMessage = useCallback(async () => {
     const text = chatInput.trim();
     if (!text || chatLoading) return;
-
     setChatMessages((prev) => [...prev, { role: "user", content: text }]);
     setChatInput("");
     setChatLoading(true);
-
     const newHistory = [...conversationHistory, { role: "user", content: text }];
-
     try {
       const parsed = await chatWithClaudeJSON({
         system: getSystemPrompt(),
@@ -754,26 +604,22 @@ export default function ProjectView({ onBack, projectId }) {
         maxTokens: 1000,
         fallback: { extracted: {}, suggestedTool: null },
       });
-
-      // Apply extracted field updates
       const fieldUpdates = [];
       if (parsed.extracted) {
         Object.entries(parsed.extracted).forEach(([key, val]) => {
-          if (val && val !== fields[key]) {
+          if (val) {
             fieldUpdates.push({ field: key, value: val });
-            handleFieldChange(key, val);
+            // Auto-update stored project fields
+            if (projectId && storedProject) {
+              const updatedFields = { ...(storedProject.fields || {}), [key]: val };
+              const updates = { fields: updatedFields };
+              if (key === "name") updates.name = val;
+              updateProject(projectId, updates);
+            }
           }
         });
       }
-
-      const aiMsg = {
-        role: "assistant", content: parsed.message,
-        fieldUpdates,
-        suggestedTool: parsed.suggestedTool,
-        suggestedToolReason: parsed.suggestedToolReason,
-      };
-      setChatMessages((prev) => [...prev, aiMsg]);
-
+      setChatMessages((prev) => [...prev, { role: "assistant", content: parsed.message, fieldUpdates: fieldUpdates.length > 0 ? fieldUpdates : undefined, suggestedTool: parsed.suggestedTool || undefined }]);
       const updatedHistory = [...newHistory, { role: "assistant", content: JSON.stringify(parsed) }];
       setConversationHistory(updatedHistory);
       if (projectId) saveChatHistory(projectId, updatedHistory);
@@ -782,9 +628,42 @@ export default function ProjectView({ onBack, projectId }) {
     }
     setChatLoading(false);
     setTimeout(() => chatInputRef.current?.focus(), 100);
-  }, [chatInput, chatLoading, conversationHistory, fields, projectId, handleFieldChange, getSystemPrompt]);
+  }, [chatInput, chatLoading, conversationHistory, projectId, storedProject, getSystemPrompt]);
 
-  // ─── Derived data ───
+  const handleChatOpen = () => {
+    setChatOpen(true);
+    if (!chatStarted) startChat();
+  };
+
+  // Merge stored data with fallback mock data
+  const project = storedProject ? {
+    name: storedProject.name || "Untitled Project",
+    collection: storedProject.fields?.collection || "",
+    stage: storedProject.stage || "concept",
+    status: storedProject.status || "draft",
+    created: new Date(storedProject.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    updated: new Date(storedProject.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    client: {
+      email: storedProject.fields?.clientEmail || "—",
+      name: storedProject.fields?.clientName || "—",
+      phone: "—",
+      created: new Date(storedProject.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }),
+    },
+    fields: storedProject.fields || {},
+    readiness: storedProject.readiness || 0,
+  } : {
+    name: "Crown of Thorns Ring",
+    collection: "Mythos Line",
+    stage: "cad",
+    status: "in-progress",
+    created: "Feb 23, 2026",
+    updated: "Mar 3, 2026",
+    client: { email: "augm3ntllc@gmail.com", name: "Lord Augm3nt", phone: "—", created: "Feb 23, 2026, 12:36 PM" },
+    fields: {},
+    readiness: 0,
+  };
+
+  // Get files grouped by category
   const filesByCategory = projectId ? getProjectFilesByCategory(projectId) : {};
   const storedGeneratedImages = storedProject?.generatedImages || [];
   const getFileUrl = (f) => f.url || (f.blobKey ? fileUrls[f.blobKey] : null);
@@ -793,21 +672,19 @@ export default function ProjectView({ onBack, projectId }) {
     return catMap[f.category] || "doc";
   };
   const formatSize = (bytes) => {
-    if (!bytes) return "\u2014";
+    if (!bytes) return "—";
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1048576) return `${(bytes / 1024).toFixed(0)} KB`;
     return `${(bytes / 1048576).toFixed(1)} MB`;
   };
 
-  const created = storedProject ? new Date(storedProject.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "\u2014";
-  const updated = storedProject ? new Date(storedProject.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "\u2014";
-  const sc = STATUS_COLORS[projectStatus] || STATUS_COLORS.draft;
-
   return (
-    <div style={{ opacity: loaded ? 1 : 0, transition: "opacity 0.4s" }}>
-      {/* Hidden file input */}
+    <>
+      {/* Hidden file input for uploads */}
       <input
-        ref={uploadRef} type="file" multiple
+        ref={uploadRef}
+        type="file"
+        multiple
         accept="image/*,.pdf,.step,.stp,.stl,.obj,.doc,.docx,.xlsx,.csv"
         style={{ display: "none" }}
         onChange={async (e) => {
@@ -816,190 +693,93 @@ export default function ProjectView({ onBack, projectId }) {
           e.target.value = "";
         }}
       />
-
-      {/* ─── PRODUCT CARD HEADER ─── */}
-      <header style={{ background: C.white, borderBottom: `1px solid ${C.border}`, position: "sticky", top: 0, zIndex: 40 }}>
-        {/* Back nav */}
-        <div style={{ padding: "16px 44px 0" }}>
-          <span onClick={onBack} style={{
-            fontFamily: SANS, fontSize: 11, color: C.light, letterSpacing: 1.5,
-            textTransform: "uppercase", cursor: "pointer", transition: "color 0.2s",
-          }}>{"\u2190"} Back to Projects</span>
+      {/* ─── Header ─── */}
+      <header style={{
+        padding: "24px 44px", background: C.white,
+        borderBottom: `1px solid ${C.border}`, position: "sticky", top: 0, zIndex: 40,
+      }}>
+        <div style={{ marginBottom: 10 }}>
+          <span
+            onClick={onBack}
+            style={{
+              fontFamily: SANS, fontSize: 11, color: C.light, letterSpacing: 1.5,
+              textTransform: "uppercase", cursor: "pointer", transition: "color 0.2s",
+            }}
+          >
+            ← Back to Projects
+          </span>
         </div>
-
-        {/* Product Card: Hero image + Info side-by-side */}
-        <div style={{ padding: "20px 44px 0", display: "flex", gap: 32, alignItems: "flex-start" }}>
-          {/* Hero Image */}
-          <div style={{
-            width: 220, height: 220, borderRadius: R, overflow: "hidden", flexShrink: 0,
-            background: heroImage ? `url(${heroImage}) center/cover` : C.section,
-            border: `1px solid ${C.border}`, position: "relative",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            {!heroImage && (
-              <div style={{ textAlign: "center" }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={C.border} strokeWidth="1">
-                  <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" />
-                </svg>
-                <div style={{ fontFamily: SANS, fontSize: 9, color: C.light, letterSpacing: 1.5, textTransform: "uppercase", marginTop: 6 }}>No Image Yet</div>
-              </div>
-            )}
-            {/* Generate button overlay */}
-            <div onClick={() => handleGenerateDesign("render")} style={{
-              position: "absolute", bottom: 0, left: 0, right: 0,
-              padding: "10px", background: "rgba(46,46,42,0.85)",
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-              cursor: genState.loading ? "default" : "pointer", transition: "all 0.2s",
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
+          <div>
+            <div style={{ fontFamily: SERIF, fontSize: 32, fontWeight: 600, color: C.black, letterSpacing: 5, textTransform: "uppercase", lineHeight: 1.1 }}>{project.name}</div>
+            <div style={{ fontFamily: SANS, fontSize: 12, color: C.light, marginTop: 6, letterSpacing: 1 }}>
+              {project.collection} &nbsp;·&nbsp; Created {project.created} &nbsp;·&nbsp; Last updated {project.updated}
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <select style={{
+              fontFamily: SANS, fontSize: 11, fontWeight: 500, letterSpacing: 2, textTransform: "uppercase",
+              padding: "9px 30px 9px 16px", color: C.mid, background: C.white,
+              border: `1px solid ${C.border}`, borderRadius: RS, cursor: "pointer", outline: "none", appearance: "auto",
             }}>
-              {genState.loading ? (
-                <div style={{
-                  width: 14, height: 14, border: `2px solid rgba(255,255,255,0.3)`, borderTopColor: "#fff",
-                  borderRadius: "50%", animation: "spin 0.8s linear infinite",
-                }} />
-              ) : (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#C8D8A0" strokeWidth="2">
-                  <path d="M6 3h12l4 6-10 13L2 9z" />
-                </svg>
-              )}
-              <span style={{ fontFamily: SANS, fontSize: 9, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase", color: "#C8D8A0" }}>
-                {genState.loading ? "Generating..." : "AI Render"}
-              </span>
-            </div>
-          </div>
-
-          {/* Info Panel */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {/* Editable name */}
-            <input
-              value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
-              onBlur={() => handleNameChange(projectName)}
-              onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
-              style={{
-                fontFamily: SERIF, fontSize: 30, fontWeight: 600, color: C.black,
-                letterSpacing: 5, textTransform: "uppercase", lineHeight: 1.15,
-                background: "transparent", border: "none", outline: "none", width: "100%",
-                padding: "0 0 4px", borderBottom: `1px solid transparent`,
-                transition: "border-color 0.2s",
-              }}
-              onFocus={(e) => e.target.style.borderBottom = `1px solid ${C.sidebarActive}`}
-              onBlurCapture={(e) => e.target.style.borderBottom = `1px solid transparent`}
-            />
-
-            {/* Editable collection line */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-              <input
-                value={fields.collection || ""}
-                onChange={(e) => setFields((p) => ({ ...p, collection: e.target.value }))}
-                onBlur={() => handleFieldChange("collection", fields.collection || "")}
-                placeholder="Collection name"
-                style={{
-                  fontFamily: SANS, fontSize: 12, color: C.light, background: "transparent",
-                  border: "none", outline: "none", letterSpacing: 1, padding: 0, width: 140,
-                }}
-              />
-              <span style={{ color: C.border }}>&middot;</span>
-              <span style={{ fontFamily: SANS, fontSize: 11, color: C.light }}>Created {created}</span>
-              <span style={{ color: C.border }}>&middot;</span>
-              <span style={{ fontFamily: SANS, fontSize: 11, color: C.light }}>Updated {updated}</span>
-            </div>
-
-            {/* Quick info grid */}
-            <div style={{ display: "flex", gap: 14, marginTop: 16, flexWrap: "wrap" }}>
-              {[
-                { label: "Type", key: "type", value: fields.type },
-                { label: "Metal", key: "metal", value: fields.metalKarat ? `${fields.metalKarat} ${fields.metal || ""}`.trim() : fields.metal },
-                { label: "Weight", key: "weight", value: fields.weight },
-                { label: "Budget", key: "budget", value: fields.budget },
-              ].map((s) => (
-                <div key={s.label} style={{
-                  background: C.section, borderRadius: RS, border: `1px solid ${C.border}`,
-                  padding: "12px 16px", textAlign: "center", minWidth: 100, flex: "1 1 0",
-                }}>
-                  <div style={{ fontFamily: SANS, fontSize: 9, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase", color: C.label, marginBottom: 4 }}>{s.label}</div>
-                  <div style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 600, color: s.value ? C.black : C.border }}>{s.value || "\u2014"}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Status + Actions row */}
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14 }}>
-              <select
-                value={projectStatus}
-                onChange={(e) => handleStatusChange(e.target.value)}
-                style={{
-                  fontFamily: SANS, fontSize: 11, fontWeight: 500, letterSpacing: 2, textTransform: "uppercase",
-                  padding: "8px 28px 8px 14px", color: sc.color, background: sc.bg,
-                  border: `1px solid ${sc.border}`, borderRadius: RS, cursor: "pointer", outline: "none", appearance: "auto",
-                }}
-              >
-                <option value="draft">Draft</option>
-                <option value="in-progress">In Progress</option>
-                <option value="review">In Review</option>
-                <option value="complete">Complete</option>
-              </select>
-              <SmallBtn label="+ Upload" onClick={() => triggerUpload("reference")} />
-              <SmallBtn label="AI Render" primary onClick={() => handleGenerateDesign("render")} disabled={genState.loading} />
-            </div>
+              <option>In Progress</option><option>Draft</option><option>In Review</option><option>Complete</option>
+            </select>
+            <SmallBtn label="Send Update Email" primary onClick={() => void 0} />
+            <button onClick={handleChatOpen} style={{
+              fontFamily: SANS, fontSize: 10, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase",
+              padding: "7px 14px", display: "inline-flex", alignItems: "center", gap: 6,
+              background: chatOpen ? C.sidebarBg : C.white, color: chatOpen ? C.sidebarActive : C.mid,
+              border: `1px solid ${chatOpen ? C.sidebarBg : C.border}`, borderRadius: RS, cursor: "pointer", transition: "all 0.2s",
+            }}>{"\u2726"} AI Chat</button>
           </div>
         </div>
-
-        {/* Pipeline */}
-        <div style={{ padding: "16px 44px 0" }}>
-          <PipelineBar current={projectStage} onChange={handleStageChange} />
-        </div>
-
-        {/* Tab bar */}
-        <div style={{ padding: "0 44px" }}>
-          <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${C.border}`, overflowX: "auto" }}>
-            {TABS.map((tab) => (
-              <button key={tab.key} onClick={() => {
-                setActiveTab(tab.key);
-                if (tab.key === "ai" && chatMessages.length === 0) startChat();
-              }} style={{
-                fontFamily: SANS, fontSize: 11, fontWeight: activeTab === tab.key ? 600 : 400,
-                letterSpacing: 2, textTransform: "uppercase", padding: "14px 20px",
-                color: activeTab === tab.key ? C.black : C.light, background: "none", border: "none",
-                borderBottom: activeTab === tab.key ? `2px solid ${C.black}` : "2px solid transparent",
-                cursor: "pointer", transition: "all 0.2s", whiteSpace: "nowrap",
-              }}>{tab.label}</button>
-            ))}
-          </div>
-        </div>
+        <PipelineBar current={project.stage} />
       </header>
 
+      {/* ─── Tab Bar ─── */}
+      <div style={{ padding: "0 44px", background: C.white }}>
+        <TabBar tabs={TABS} active={activeTab} onSelect={setActiveTab} />
+      </div>
+
+      {/* ─── Content + Chat Sidebar Row ─── */}
+      <div style={{ display: "flex", minHeight: "calc(100vh - 240px)" }}>
+
       {/* ─── Tab Content ─── */}
-      <div style={{ padding: "28px 44px 60px", maxWidth: 1080, animation: "slideUp 0.25s ease" }} key={activeTab}>
+      <div style={{ flex: 1, padding: "28px 44px 60px", maxWidth: chatOpen ? undefined : 1080, animation: "slideUp 0.25s ease", minWidth: 0, transition: "max-width 0.3s" }} key={activeTab}>
 
         {/* ════════════════════════════════════════ */}
         {/* OVERVIEW TAB */}
         {/* ════════════════════════════════════════ */}
         {activeTab === "overview" && (
           <>
-            {/* Generated image error display */}
-            {genState.error && (
-              <div style={{ marginBottom: 14, padding: "12px 18px", background: C.redBg, border: `1px solid ${C.redBorder}`, borderRadius: R }}>
-                <span style={{ fontFamily: SANS, fontSize: 12, color: C.coral }}>{genState.error}</span>
+            {/* Client Info */}
+            <Section label="Client" rightAction={<SmallBtn label="Edit Client" onClick={() => void 0} />}>
+              <div style={{ display: "flex", gap: 40, flexWrap: "wrap" }}>
+                <InfoField label="Email" value={project.client.email} />
+                <InfoField label="Name" value={project.client.name} />
+                <InfoField label="Phone" value={project.client.phone} />
+                <InfoField label="Created" value={project.client.created} />
               </div>
-            )}
-
-            {/* Description */}
-            <Section label="Description">
-              <EditableField
-                label="Project Description"
-                value={fields.description}
-                fieldKey="description"
-                onChange={handleFieldChange}
-                wide textarea
-              />
             </Section>
 
+            {/* Quick Info Grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 14 }}>
+              {[
+                { label: "Type", value: project.fields.type || "Ring" },
+                { label: "Metal", value: project.fields.metal ? `${project.fields.metalKarat || ""} ${project.fields.metal}`.trim() : "14k Yellow Gold" },
+                { label: "Est. Weight", value: project.fields.weight || "—" },
+                { label: "Budget", value: project.fields.budget || "—" },
+              ].map((s, i) => (
+                <div key={i} style={{ background: C.section, borderRadius: R, border: `1px solid ${C.border}`, padding: "18px 20px", textAlign: "center" }}>
+                  <div style={{ fontFamily: SANS, fontSize: 9.5, fontWeight: 600, letterSpacing: 2.5, textTransform: "uppercase", color: C.label, marginBottom: 8 }}>{s.label}</div>
+                  <div style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 600, color: C.black }}>{s.value}</div>
+                </div>
+              ))}
+            </div>
+
             {/* Reference Images */}
-            <Section label="Images" count={(filesByCategory.reference || []).length + (filesByCategory.render || []).length + storedGeneratedImages.length} rightAction={<SmallBtn label="+ Upload" onClick={() => triggerUpload("reference")} />}>
+            <Section label="Reference Images" count={(filesByCategory.reference || []).length} rightAction={<SmallBtn label="+ Upload" onClick={() => triggerUpload("reference")} />}>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                {storedGeneratedImages.map((img, i) => (
-                  <ImageSlot key={img.url || i} label={`AI ${i + 1}`} hasImage src={img.url} />
-                ))}
                 {(filesByCategory.reference || []).map((f) => {
                   const url = getFileUrl(f);
                   return <ImageSlot key={f.id} label={f.name} hasImage={!!url} src={url} />;
@@ -1008,15 +788,77 @@ export default function ProjectView({ onBack, projectId }) {
                   const url = getFileUrl(f);
                   return <ImageSlot key={f.id} label={f.name} hasImage={!!url} src={url} />;
                 })}
-                <ImageSlot label="Add Image" hasImage={false} onClick={() => triggerUpload("reference")} />
+                <ImageSlot label="Add Image" hasImage={false} />
               </div>
             </Section>
 
-            {/* Client info */}
-            <Section label="Client">
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "18px 32px" }}>
-                <EditableField label="Client Name" value={fields.clientName} fieldKey="clientName" onChange={handleFieldChange} />
-                <EditableField label="Client Email" value={fields.clientEmail} fieldKey="clientEmail" onChange={handleFieldChange} />
+            {/* Recent Activity */}
+            <Section label="Recent Activity" rightAction={<span onClick={() => setActiveTab("timeline")} style={{ fontFamily: SANS, fontSize: 10.5, color: C.light, letterSpacing: 1.5, textTransform: "uppercase", cursor: "pointer" }}>View All →</span>}>
+              <TimelineItem icon="📐" title="CAD file uploaded" detail="crown-thorns-v3.step — Revision 3 from designer" time="2h ago" accent={C.blue} />
+              <TimelineItem icon="💬" title="Message from CAD designer" detail="'Band width adjusted to 6mm per your note'" time="5h ago" accent={C.purple} />
+              <TimelineItem icon="✏️" title="Specs updated" detail="Metal karat changed from 18k to 14k" time="1d ago" accent={C.amber} />
+              <TimelineItem icon="🖼" title="AI render generated" detail="Photorealistic render — front view, studio lighting" time="2d ago" accent={C.green} />
+            </Section>
+          </>
+        )}
+
+        {/* ════════════════════════════════════════ */}
+        {/* DESIGN & ASSETS TAB */}
+        {/* ════════════════════════════════════════ */}
+        {activeTab === "design" && (
+          <>
+            <Section label="AI-Generated Concepts" count={storedGeneratedImages.length} rightAction={<SmallBtn label={genState.loading ? "Generating..." : "+ Generate New"} primary onClick={() => handleGenerateDesign("concept")} />}>
+              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                {genState.imageUrl && !storedGeneratedImages.find(i => i.url === genState.imageUrl) && (
+                  <ImageSlot label="New" hasImage src={genState.imageUrl} />
+                )}
+                {storedGeneratedImages.map((img, i) => (
+                  <ImageSlot key={img.url || i} label={`Concept ${i + 1}`} hasImage src={img.url} />
+                ))}
+                <ImageSlot label="Generate" />
+              </div>
+              {genState.loading && (
+                <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{
+                    width: 16, height: 16, border: `2px solid ${C.border}`, borderTopColor: C.coral,
+                    borderRadius: "50%", animation: "spin 0.8s linear infinite",
+                  }} />
+                  <span style={{ fontFamily: SANS, fontSize: 12, color: C.mid }}>Generating with Nano Banana... This may take up to 30 seconds</span>
+                </div>
+              )}
+              {genState.error && (
+                <div style={{ marginTop: 12, fontFamily: SANS, fontSize: 12, color: C.coral }}>{genState.error}</div>
+              )}
+              {storedGeneratedImages.length > 0 && storedGeneratedImages[storedGeneratedImages.length - 1].promptUsed && (
+                <div style={{ marginTop: 16, fontFamily: SANS, fontSize: 12, color: C.light }}>
+                  <span style={{ fontFamily: MONO, fontSize: 10, color: C.mid }}>PROMPT:</span> {storedGeneratedImages[storedGeneratedImages.length - 1].promptUsed}
+                </div>
+              )}
+            </Section>
+
+            <Section label="Sketches & Drawings" count={(filesByCategory.sketch || []).length} rightAction={<SmallBtn label="+ Upload" onClick={() => triggerUpload("sketch")} />}>
+              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                {(filesByCategory.sketch || []).map((f) => {
+                  const url = getFileUrl(f);
+                  return <ImageSlot key={f.id} label={f.name} hasImage={!!url} src={url} />;
+                })}
+                <ImageSlot label="Add Sketch" />
+              </div>
+            </Section>
+
+            <Section label="Photorealistic Renders" count={(filesByCategory.render || []).length} rightAction={<SmallBtn label={genState.loading ? "Generating..." : "+ Render"} primary onClick={() => handleGenerateDesign("render")} />}>
+              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                {(filesByCategory.render || []).map((f) => {
+                  const url = getFileUrl(f);
+                  return <ImageSlot key={f.id} label={f.name} hasImage={!!url} src={url} />;
+                })}
+                <ImageSlot label="Add Render" />
+              </div>
+            </Section>
+
+            <Section label="Mood Board & References" count={0} rightAction={<SmallBtn label="+ Add" onClick={() => void 0} />}>
+              <div style={{ padding: "30px 0", textAlign: "center" }}>
+                <div style={{ fontFamily: SANS, fontSize: 12, color: C.light }}>Drag images here or click to add inspiration references</div>
               </div>
             </Section>
           </>
@@ -1029,253 +871,374 @@ export default function ProjectView({ onBack, projectId }) {
           <>
             <Section label="General">
               <div style={{ display: "flex", flexWrap: "wrap", gap: "18px 32px" }}>
-                <EditableField label="Jewelry Type" value={fields.type} fieldKey="type" onChange={handleFieldChange}
-                  select options={["Ring", "Pendant", "Bracelet", "Necklace", "Earrings", "Brooch", "Cufflinks", "Other"]} />
-                <EditableField label="Name" value={fields.name || projectName} fieldKey="name" onChange={handleFieldChange} />
-                <EditableField label="Design Motif" value={fields.designMotif} fieldKey="designMotif" onChange={handleFieldChange} />
-                <EditableField label="Collection" value={fields.collection} fieldKey="collection" onChange={handleFieldChange} />
-                <EditableField label="Description" value={fields.description} fieldKey="description" onChange={handleFieldChange} wide textarea />
+                <Field label="Jewelry Type" value={project.fields.type || "Ring"} />
+                <Field label="Name" value={project.fields.name || project.name} />
+                <Field label="Description" value={project.fields.description || "Crown of thorns design, literal depiction, stylized thorn motif, detailed thorns, sharp thorns, crown of thorns, 14k yellow gold"} wide textarea />
               </div>
             </Section>
 
             <Section label="Dimensions & Sizing">
               <div style={{ display: "flex", flexWrap: "wrap", gap: "18px 32px" }}>
-                <EditableField label="Size" value={fields.size} fieldKey="size" onChange={handleFieldChange} />
-                <EditableField label="Band Width" value={fields.bandWidth} fieldKey="bandWidth" onChange={handleFieldChange} />
-                <EditableField label="Band Style" value={fields.bandStyle} fieldKey="bandStyle" onChange={handleFieldChange} />
-                <EditableField label="Weight (est.)" value={fields.weight} fieldKey="weight" onChange={handleFieldChange} />
+                <Field label="Ring Size" value="10" />
+                <Field label="Band Width" value="6mm" />
+                <Field label="Band Thickness" value="2.2mm" />
+                <Field label="Total Height" value="8mm" />
+                <Field label="Gender" value="" />
+                <Field label="Weight (est.)" value="8.2g" />
               </div>
             </Section>
 
             <Section label="Metal">
               <div style={{ display: "flex", flexWrap: "wrap", gap: "18px 32px" }}>
-                <EditableField label="Metal" value={fields.metal} fieldKey="metal" onChange={handleFieldChange} />
-                <EditableField label="Metal Karat" value={fields.metalKarat} fieldKey="metalKarat" onChange={handleFieldChange} />
-                <EditableField label="Finish" value={fields.finish} fieldKey="finish" onChange={handleFieldChange}
-                  select options={["High Polish", "Matte", "Brushed", "Satin", "Hammered", "Sandblasted", "Oxidized"]} />
+                <Field label="Metal" value={project.fields.metal || "Yellow Gold"} />
+                <Field label="Metal Karat" value={project.fields.metalKarat || "14k"} />
+                <Field label="Finish" value={project.fields.finish || "High Polish"} />
+                <Field label="Plating" value="None" />
               </div>
             </Section>
 
-            <Section label="Gemstones" collapsed={collapseState.gems} onToggle={() => toggle("gems")}>
+            <Section label="Gemstones" collapsed={collapseState.gems} onToggle={() => toggle("gems")} count={0}>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "18px 32px" }}>
-                <EditableField label="Main Gemstone" value={fields.mainGemstone} fieldKey="mainGemstone" onChange={handleFieldChange} />
-                <EditableField label="Gemstone Shape" value={fields.gemstoneShape} fieldKey="gemstoneShape" onChange={handleFieldChange} />
-                <EditableField label="Setting Type" value={fields.settingType} fieldKey="settingType" onChange={handleFieldChange}
-                  select options={["Prong", "Bezel", "Pav\u00e9", "Channel", "Tension", "Flush", "Cluster", "Halo"]} />
-                <EditableField label="Side Stones" value={fields.sideStones} fieldKey="sideStones" onChange={handleFieldChange} />
+                <Field label="Main Gemstone" value="" />
+                <Field label="Gemstone Shape" value="" />
+                <Field label="Gemstone Size" value="" />
+                <Field label="Gemstone Quality" value="" />
+                <Field label="Setting Type" value="" />
+                <Field label="Number of Stones" value="" />
+                <Field label="Side Stones" value="" />
+                <Field label="Total Carat Weight" value="" />
               </div>
             </Section>
 
-            <Section label="Production" collapsed={collapseState.production} onToggle={() => toggle("production")}>
+            <Section label="Style Details" collapsed={collapseState.style} onToggle={() => toggle("style")}>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "18px 32px" }}>
-                <EditableField label="Casting Method" value={fields.castingMethod} fieldKey="castingMethod" onChange={handleFieldChange}
-                  select options={["Lost Wax", "Die Casting", "Sand Casting", "3D Printed", "Hand Fabricated"]} />
-                <EditableField label="Budget" value={fields.budget} fieldKey="budget" onChange={handleFieldChange} />
-                <EditableField label="Timeline" value={fields.timeline} fieldKey="timeline" onChange={handleFieldChange} />
-                <EditableField label="Special Notes" value={fields.specialNotes} fieldKey="specialNotes" onChange={handleFieldChange} wide textarea />
+                <Field label="Band Style" value="Sculptural" />
+                <Field label="Ring Type" value="Statement" />
+                <Field label="Design Motif" value="Crown of Thorns" />
+                <Field label="Texture" value="Organic / Thorn Detail" />
+                <Field label="Engraving" value="" />
+                <Field label="Special Instructions" value="" wide textarea />
               </div>
             </Section>
           </>
         )}
 
         {/* ════════════════════════════════════════ */}
-        {/* ASSETS & FILES TAB */}
+        {/* MATERIALS & COST TAB */}
         {/* ════════════════════════════════════════ */}
-        {activeTab === "assets" && (
+        {activeTab === "materials" && (
           <>
-            <Section label="AI-Generated Images" count={storedGeneratedImages.length} rightAction={
-              <div style={{ display: "flex", gap: 8 }}>
-                <SmallBtn label={genState.loading ? "Generating..." : "Sketch"} onClick={() => handleGenerateDesign("sketch")} disabled={genState.loading} />
-                <SmallBtn label={genState.loading ? "Generating..." : "Render"} primary onClick={() => handleGenerateDesign("render")} disabled={genState.loading} />
+            <Section label="Bill of Materials">
+              {/* Table header */}
+              <div style={{
+                display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr 1fr", gap: 8,
+                padding: "0 0 8px", borderBottom: `2px solid ${C.border}`,
+                fontFamily: SANS, fontSize: 9.5, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase", color: C.label,
+              }}>
+                <span>Material</span><span>Specification</span><span style={{ textAlign: "right" }}>Qty</span>
+                <span>Unit</span><span style={{ textAlign: "right" }}>$/Unit</span><span style={{ textAlign: "right" }}>Total</span>
               </div>
-            }>
-              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                {genState.imageUrl && !storedGeneratedImages.find(i => i.url === genState.imageUrl) && (
-                  <ImageSlot label="New" hasImage src={genState.imageUrl} />
-                )}
-                {storedGeneratedImages.map((img, i) => (
-                  <ImageSlot key={img.url || i} label={`AI ${i + 1}`} hasImage src={img.url} />
-                ))}
-                <ImageSlot label="Generate" />
+              <MaterialRow name="Yellow Gold" spec="14k (585)" qty="8.2" unit="grams" unitCost="52.00" total="426.40" />
+              <MaterialRow name="Casting" spec="Lost wax, single" qty="1" unit="piece" unitCost="85.00" total="85.00" />
+              <MaterialRow name="Labor – CAD" spec="Custom design, 3 revisions" qty="4" unit="hours" unitCost="65.00" total="260.00" />
+              <MaterialRow name="Labor – Setting" spec="N/A — no stones" qty="0" unit="hours" unitCost="0" total="0.00" />
+              <MaterialRow name="Labor – Finishing" spec="Polish, QC" qty="2" unit="hours" unitCost="45.00" total="90.00" />
+
+              <div style={{
+                display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr 1fr", gap: 8,
+                padding: "14px 0 0", fontFamily: SANS, fontSize: 13, fontWeight: 600, color: C.black,
+              }}>
+                <span style={{ gridColumn: "1 / 6", textAlign: "right", letterSpacing: 2, textTransform: "uppercase", fontSize: 10.5 }}>Subtotal</span>
+                <span style={{ fontFamily: MONO, textAlign: "right" }}>$861.40</span>
               </div>
-              {genState.loading && (
-                <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{
-                    width: 16, height: 16, border: `2px solid ${C.border}`, borderTopColor: C.coral,
-                    borderRadius: "50%", animation: "spin 0.8s linear infinite",
-                  }} />
-                  <span style={{ fontFamily: SANS, fontSize: 12, color: C.mid }}>Generating... This may take up to 30 seconds</span>
+            </Section>
+
+            <Section label="Pricing">
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "18px 32px" }}>
+                <Field label="Material Cost" value="$426.40" readOnly />
+                <Field label="Labor Cost" value="$435.00" readOnly />
+                <Field label="Markup %" value="45%" />
+                <Field label="Retail Price" value="$1,249.03" readOnly />
+                <Field label="Client Budget" value="" />
+                <Field label="Deposit Received" value="" />
+              </div>
+            </Section>
+
+            <Section label="Metal Market" collapsed={collapseState.market} onToggle={() => toggle("market")}>
+              <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
+                <InfoField label="Gold Spot (oz)" value="$2,870.00" />
+                <InfoField label="14k Per Gram" value="$52.00" />
+                <InfoField label="Last Updated" value="Mar 3, 2026" />
+              </div>
+              <div style={{ marginTop: 12, fontFamily: SANS, fontSize: 11.5, color: C.light }}>
+                Metal prices are estimates. Final cost calculated at time of casting.
+              </div>
+            </Section>
+          </>
+        )}
+
+        {/* ════════════════════════════════════════ */}
+        {/* MANUFACTURING TAB */}
+        {/* ════════════════════════════════════════ */}
+        {activeTab === "manufacturing" && (
+          <>
+            <Section label="CAD Files" count={(filesByCategory.cad || []).length || 3} rightAction={<SmallBtn label="+ Upload CAD" onClick={() => triggerUpload("cad")} />}>
+              <FileCard name="crown-thorns-v3.step" type="cad" size="4.2 MB" date="Mar 3, 2026" status="Current" />
+              <FileCard name="crown-thorns-v2.step" type="cad" size="3.8 MB" date="Feb 28, 2026" />
+              <FileCard name="crown-thorns-v1.step" type="cad" size="3.1 MB" date="Feb 25, 2026" />
+            </Section>
+
+            <Section label="3D Models" count={(filesByCategory.model3d || []).length || 2} rightAction={<SmallBtn label="+ Upload Model" onClick={() => triggerUpload("3d")} />}>
+              <FileCard name="crown-thorns-render.stl" type="model" size="12.6 MB" date="Mar 2, 2026" status="Current" />
+              <FileCard name="crown-thorns-print.stl" type="model" size="8.4 MB" date="Mar 1, 2026" />
+            </Section>
+
+            <Section label="Production Notes">
+              <Field label="Casting Method" value="Lost Wax" />
+              <div style={{ height: 12 }} />
+              <Field label="Production Notes" value="Thorn tips need extra attention during finishing — fragile points. Double-check wall thickness on inner band before casting. Client prefers slightly matte finish on thorn surfaces only." wide textarea />
+            </Section>
+
+            <Section label="Quality Checklist" collapsed={collapseState.qa} onToggle={() => toggle("qa")}>
+              {["CAD approved by client", "Wall thickness verified (min 1.5mm)", "Casting tree positioned", "Cast piece inspected", "Thorn details intact post-cast", "Polish grade confirmed", "Final QC passed", "Photographed for records"].map((item, i) => (
+                <label key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", cursor: "pointer", borderBottom: i < 7 ? `1px solid ${C.border}` : "none" }}>
+                  <input type="checkbox" defaultChecked={i < 3} style={{ accentColor: C.green, width: 14, height: 14 }} />
+                  <span style={{ fontFamily: SANS, fontSize: 13, color: i < 3 ? C.mid : C.dark }}>{item}</span>
+                </label>
+              ))}
+            </Section>
+          </>
+        )}
+
+        {/* ════════════════════════════════════════ */}
+        {/* COMMUNICATION TAB */}
+        {/* ════════════════════════════════════════ */}
+        {activeTab === "communication" && (
+          <>
+            {/* Chat Channels */}
+            <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
+              <Pill label="CAD Designer" color={C.blue} bg={C.blueBg} border={C.blueBorder} />
+              <Pill label="Client" color={C.green} bg={C.greenBg} border={C.greenBorder} />
+              <Pill label="Manufacturer" color={C.amber} bg={C.amberBg} border={C.amberBorder} />
+              <Pill label="Internal Notes" color={C.purple} bg={C.purpleBg} border={C.purpleBorder} />
+            </div>
+
+            <Section label="CAD Designer Thread" style={{ padding: 0 }}>
+              <div style={{ padding: "20px 24px", maxHeight: 400, overflowY: "auto" }}>
+                <ChatBubble from="Alex (CAD)" message="Here's the v3 file with the adjusted band width. Thorn detail is tighter now — let me know if you want more separation between the points." time="Mar 3, 10:22 AM" />
+                <ChatBubble message="Looks great. Can we make the inner band slightly more rounded for comfort? Also the two thorns on the left side seem thicker than the right." time="Mar 3, 10:45 AM" isMe />
+                <ChatBubble from="Alex (CAD)" message="Good catch on the symmetry — I'll fix that in v4. Comfort fit inner band is easy, will have it to you by EOD." time="Mar 3, 11:02 AM" />
+              </div>
+              <div style={{ padding: "14px 24px", borderTop: `1px solid ${C.border}`, display: "flex", gap: 10 }}>
+                <input placeholder="Type a message…" style={{
+                  flex: 1, fontFamily: SANS, fontSize: 13, padding: "10px 14px", color: C.dark,
+                  background: C.white, border: `1px solid ${C.border}`, borderRadius: RS, outline: "none",
+                }} />
+                <SmallBtn label="Send" primary onClick={() => void 0} />
+              </div>
+            </Section>
+
+            <Section label="Client Messages" collapsed={collapseState.clientChat} onToggle={() => toggle("clientChat")} count={3}>
+              <ChatBubble from="Lord Augm3nt" message="I want it to look like an actual crown of thorns wrapped around the finger. Not cartoonish — realistic, organic thorns." time="Feb 23, 12:40 PM" />
+              <ChatBubble message="Understood — going for a sculptural, organic feel. I'll have some AI concepts for you to review within the hour." time="Feb 23, 12:55 PM" isMe />
+              <ChatBubble from="Lord Augm3nt" message="Perfect. Size 10, 14k yellow gold. No stones." time="Feb 23, 1:02 PM" />
+            </Section>
+
+            <Section label="Internal Notes" collapsed={collapseState.notes} onToggle={() => toggle("notes")} count={2}>
+              <div style={{ fontFamily: SANS, fontSize: 13, color: C.dark, lineHeight: 1.7 }}>
+                <div style={{ padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
+                  <span style={{ fontFamily: MONO, fontSize: 10, color: C.light }}>Mar 1 — </span>
+                  Client is particular about thorn realism. Show at least 4 concept variations before proceeding to CAD. May want to do a wax try-on.
                 </div>
-              )}
-              {genState.error && (
-                <div style={{ marginTop: 12, fontFamily: SANS, fontSize: 12, color: C.coral }}>{genState.error}</div>
-              )}
+                <div style={{ padding: "8px 0" }}>
+                  <span style={{ fontFamily: MONO, fontSize: 10, color: C.light }}>Feb 24 — </span>
+                  Gold market is volatile this week. Lock in price at casting order, not before.
+                </div>
+              </div>
+            </Section>
+          </>
+        )}
+
+        {/* ════════════════════════════════════════ */}
+        {/* DOCUMENTS TAB */}
+        {/* ════════════════════════════════════════ */}
+        {activeTab === "documents" && (
+          <>
+            <Section label="Invoices & Quotes" count={2} rightAction={<SmallBtn label="+ New Invoice" onClick={() => void 0} />}>
+              <FileCard name="Quote-CrownThorns-001.pdf" type="pdf" size="124 KB" date="Feb 24, 2026" status="Current" />
+              <FileCard name="Deposit-Invoice-001.pdf" type="pdf" size="98 KB" date="Feb 25, 2026" />
             </Section>
 
-            <Section label="Reference Images" count={(filesByCategory.reference || []).length} rightAction={<SmallBtn label="+ Upload" onClick={() => triggerUpload("reference")} />}>
-              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                {(filesByCategory.reference || []).map((f) => {
-                  const url = getFileUrl(f);
-                  return <ImageSlot key={f.id} label={f.name} hasImage={!!url} src={url} />;
-                })}
-                <ImageSlot label="Add Image" onClick={() => triggerUpload("reference")} />
+            <Section label="Certificates & Grading" count={0} rightAction={<SmallBtn label="+ Upload" onClick={() => void 0} />}>
+              <div style={{ padding: "24px 0", textAlign: "center" }}>
+                <div style={{ fontFamily: SANS, fontSize: 12, color: C.light, marginBottom: 4 }}>No certificates uploaded</div>
+                <div style={{ fontFamily: SANS, fontSize: 11, color: C.light }}>Upload stone grading reports, metal assay certs, or appraisals</div>
               </div>
             </Section>
 
-            <Section label="Sketches" count={(filesByCategory.sketch || []).length} rightAction={<SmallBtn label="+ Upload" onClick={() => triggerUpload("sketch")} />}>
-              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                {(filesByCategory.sketch || []).map((f) => {
-                  const url = getFileUrl(f);
-                  return <ImageSlot key={f.id} label={f.name} hasImage={!!url} src={url} />;
-                })}
-                <ImageSlot label="Add Sketch" onClick={() => triggerUpload("sketch")} />
+            <Section label="Client Agreements" count={1} rightAction={<SmallBtn label="+ Upload" onClick={() => void 0} />}>
+              <FileCard name="Custom-Order-Agreement.pdf" type="doc" size="210 KB" date="Feb 23, 2026" />
+            </Section>
+
+            <Section label="Shipping & Insurance" count={0} collapsed={collapseState.shipping} onToggle={() => toggle("shipping")}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "18px 32px" }}>
+                <Field label="Shipping Method" value="" />
+                <Field label="Insurance Value" value="" />
+                <Field label="Tracking Number" value="" mono />
+                <Field label="Delivery Date" value="" />
               </div>
             </Section>
 
-            <Section label="CAD Files" count={(filesByCategory.cad || []).length} rightAction={<SmallBtn label="+ Upload CAD" onClick={() => triggerUpload("cad")} />}>
-              {(filesByCategory.cad || []).length > 0 ? (
-                (filesByCategory.cad || []).map((f) => (
-                  <FileCard key={f.id} name={f.name} type="cad" size={formatSize(f.size)} date={new Date(f.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
-                ))
-              ) : (
-                <div style={{ padding: "20px 0", textAlign: "center", fontFamily: SANS, fontSize: 12, color: C.light }}>No CAD files uploaded yet</div>
-              )}
-            </Section>
-
-            <Section label="All Project Files" count={projectFiles.length} rightAction={<SmallBtn label="+ Upload" onClick={() => triggerUpload("other")} />}>
+            <Section label="All Project Files" count={projectFiles.length || 8} rightAction={<SmallBtn label="+ Upload" onClick={() => triggerUpload("other")} />}>
               {projectFiles.length > 0 ? (
                 projectFiles.map((f) => (
                   <FileCard
-                    key={f.id} name={f.name} type={getFileTypeKey(f)}
+                    key={f.id}
+                    name={f.name}
+                    type={getFileTypeKey(f)}
                     size={formatSize(f.size)}
                     date={new Date(f.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                   />
                 ))
               ) : (
-                <div style={{ padding: "20px 0", textAlign: "center", fontFamily: SANS, fontSize: 12, color: C.light }}>
-                  No files yet. Upload files or generate AI images to get started.
-                </div>
+                <>
+                  <FileCard name="crown-thorns-v3.step" type="cad" size="4.2 MB" date="Mar 3" />
+                  <FileCard name="crown-thorns-render.stl" type="model" size="12.6 MB" date="Mar 2" />
+                  <FileCard name="render-front-v2.png" type="image" size="2.1 MB" date="Mar 1" />
+                  <FileCard name="render-side-v2.png" type="image" size="1.8 MB" date="Mar 1" />
+                  <FileCard name="concept-ai-001.png" type="image" size="890 KB" date="Feb 23" />
+                  <FileCard name="Quote-CrownThorns-001.pdf" type="pdf" size="124 KB" date="Feb 24" />
+                  <FileCard name="Custom-Order-Agreement.pdf" type="doc" size="210 KB" date="Feb 23" />
+                  <FileCard name="client-reference-photo.jpg" type="image" size="1.4 MB" date="Feb 23" />
+                </>
               )}
             </Section>
           </>
         )}
 
         {/* ════════════════════════════════════════ */}
-        {/* AI ASSISTANT TAB */}
+        {/* TIMELINE TAB */}
         {/* ════════════════════════════════════════ */}
-        {activeTab === "ai" && (
-          <div style={{
-            background: C.white, borderRadius: R, border: `1px solid ${C.border}`,
-            display: "flex", flexDirection: "column", height: "calc(100vh - 420px)", minHeight: 400,
-          }}>
-            {/* Chat header */}
-            <div style={{
-              padding: "16px 20px", borderBottom: `1px solid ${C.border}`,
-              display: "flex", alignItems: "center", gap: 10,
-            }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: 16, background: C.sidebarBg,
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
-                <span style={{ fontFamily: SERIF, fontSize: 14, color: C.sidebarActive, fontWeight: 700 }}>Z</span>
-              </div>
-              <div>
-                <div style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 600, color: C.black, letterSpacing: 3, textTransform: "uppercase" }}>Imagine</div>
-                <div style={{ fontFamily: SANS, fontSize: 10, color: C.light }}>
-                  {chatSource === "imagine" && chatMessages.length > 0 ? "Continuing from Imagine session" : "AI Design Consultant for this project"}
-                </div>
-              </div>
-            </div>
-
-            {/* Messages */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
-              {chatMessages.length === 0 && !chatLoading && (
-                <div style={{ textAlign: "center", padding: "40px 20px" }}>
-                  <div style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 600, color: C.black, letterSpacing: 4, textTransform: "uppercase", marginBottom: 12 }}>Project Assistant</div>
-                  <div style={{ fontFamily: SANS, fontSize: 13, color: C.light, lineHeight: 1.7, maxWidth: 360, margin: "0 auto" }}>
-                    Ask me to update specs, suggest materials, refine the design, generate images, or anything else about this piece.
-                  </div>
-                  <button onClick={startChat} style={{
-                    marginTop: 20, padding: "12px 28px",
-                    fontFamily: SANS, fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase",
-                    color: C.white, background: C.sidebarBg, border: "none", borderRadius: RS, cursor: "pointer",
-                  }}>{"\u2726"} Start Chat</button>
-                </div>
-              )}
-              {chatMessages.map((msg, i) => (
-                <div key={i}>
-                  <ChatMessage message={msg.content} isUser={msg.role === "user"} />
-                  {msg.fieldUpdates?.map((u, j) => (
-                    <FieldUpdateToast key={j} field={u.field} value={u.value} />
-                  ))}
-                  {msg.suggestedTool && TOOL_INFO[msg.suggestedTool] && (
-                    <div style={{ padding: "4px 0 4px 32px" }}>
-                      <div onClick={() => {
-                        if (msg.suggestedTool === "render" || msg.suggestedTool === "sketch") handleGenerateDesign(msg.suggestedTool);
-                      }} style={{
-                        display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px",
-                        background: C.blueBg, border: `1px solid ${C.blueBorder}`, borderRadius: R,
-                        cursor: "pointer", transition: "all 0.2s",
-                      }}>
-                        <span style={{ fontSize: 14 }}>{TOOL_INFO[msg.suggestedTool].icon}</span>
-                        <span style={{ fontFamily: SANS, fontSize: 10, fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase", color: C.blue }}>
-                          {TOOL_INFO[msg.suggestedTool].label}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-              {chatLoading && <TypingDots />}
-              <div ref={chatEndRef} />
-            </div>
-
-            {/* Input */}
-            <div style={{ padding: "14px 20px", borderTop: `1px solid ${C.border}`, display: "flex", gap: 10, alignItems: "flex-end" }}>
-              <div style={{
-                flex: 1, background: C.section, borderRadius: R, border: `1px solid ${C.border}`, transition: "border-color 0.2s",
-              }}>
-                <textarea
-                  ref={chatInputRef}
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } }}
-                  placeholder="Ask about this project..."
-                  rows={1}
-                  style={{
-                    width: "100%", padding: "12px 16px", fontFamily: SANS, fontSize: 13,
-                    color: C.dark, background: "transparent", border: "none", resize: "none",
-                    lineHeight: 1.5, minHeight: 42, maxHeight: 120, overflowY: "auto",
-                  }}
-                  onInput={(e) => {
-                    e.target.style.height = "auto";
-                    e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
-                  }}
-                  onFocus={(e) => e.target.parentElement.style.borderColor = C.borderHover}
-                  onBlur={(e) => e.target.parentElement.style.borderColor = C.border}
-                  disabled={chatLoading}
-                />
-              </div>
-              <button
-                onClick={sendChatMessage}
-                disabled={chatLoading || !chatInput.trim()}
-                style={{
-                  width: 42, height: 42, borderRadius: R, border: "none",
-                  background: chatInput.trim() ? C.coral : C.border,
-                  color: C.white, cursor: chatInput.trim() ? "pointer" : "default",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  transition: "all 0.2s", flexShrink: 0,
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M22 2L11 13" /><path d="M22 2L15 22L11 13L2 9L22 2Z" />
-                </svg>
-              </button>
-            </div>
-          </div>
+        {activeTab === "timeline" && (
+          <Section label="Full Project Timeline">
+            <TimelineItem icon="📐" title="CAD file uploaded — v3" detail="crown-thorns-v3.step uploaded by Alex (CAD designer)" time="Mar 3, 10:22 AM" accent={C.blue} />
+            <TimelineItem icon="💬" title="Designer message" detail="Band width adjusted to 6mm, comfort fit inner band" time="Mar 3, 10:22 AM" accent={C.purple} />
+            <TimelineItem icon="🖼" title="Render generated" detail="Photorealistic front view render — studio lighting" time="Mar 2, 4:15 PM" accent={C.green} />
+            <TimelineItem icon="📐" title="CAD file uploaded — v2" detail="crown-thorns-v2.step — thorn detail refined" time="Feb 28, 2:30 PM" accent={C.blue} />
+            <TimelineItem icon="✏️" title="Specifications updated" detail="Metal karat changed: 18k → 14k per client request" time="Feb 27, 11:00 AM" accent={C.amber} />
+            <TimelineItem icon="📐" title="CAD file uploaded — v1" detail="crown-thorns-v1.step — initial model from sketches" time="Feb 25, 9:00 AM" accent={C.blue} />
+            <TimelineItem icon="💰" title="Deposit invoice sent" detail="Deposit-Invoice-001.pdf sent to client" time="Feb 25, 8:30 AM" accent={C.coral} />
+            <TimelineItem icon="📄" title="Quote sent to client" detail="Quote-CrownThorns-001.pdf — $1,249 estimated total" time="Feb 24, 3:00 PM" accent={C.coral} />
+            <TimelineItem icon="🤖" title="AI concepts generated" detail="4 variations generated from initial prompt" time="Feb 23, 1:30 PM" accent={C.green} />
+            <TimelineItem icon="📝" title="Specifications captured" detail="Ring, size 10, 14k yellow gold, no stones, sculptural thorn motif" time="Feb 23, 12:50 PM" accent={C.amber} />
+            <TimelineItem icon="💬" title="Client conversation" detail="Initial requirements discussed via chat" time="Feb 23, 12:40 PM" accent={C.purple} />
+            <TimelineItem icon="📸" title="Reference image uploaded" detail="client-reference-photo.jpg — crown of thorns inspiration" time="Feb 23, 12:36 PM" accent={C.green} />
+            <TimelineItem icon="🆕" title="Project created" detail="Crown of Thorns Ring — Mythos Line" time="Feb 23, 12:36 PM" accent={C.black} />
+          </Section>
         )}
 
       </div>
-    </div>
+
+      {/* ─── AI Chat Sidebar ─── */}
+      {chatOpen && (
+        <div style={{
+          width: 370, flexShrink: 0, borderLeft: `1px solid ${C.border}`, background: C.section,
+          display: "flex", flexDirection: "column", height: "calc(100vh - 240px)", position: "sticky", top: 240,
+        }}>
+          {/* Chat header */}
+          <div style={{ padding: "14px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", background: C.white }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 28, height: 28, borderRadius: 14, background: C.sidebarBg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <span style={{ fontFamily: SERIF, fontSize: 11, color: C.sidebarActive, fontWeight: 700 }}>Z</span>
+              </div>
+              <div>
+                <div style={{ fontFamily: SERIF, fontSize: 13, fontWeight: 600, color: C.black, letterSpacing: 2, textTransform: "uppercase" }}>Imagine</div>
+                <div style={{ fontFamily: SANS, fontSize: 9, color: C.light }}>
+                  {chatSource === "imagine" ? "Continuing from Imagine" : "AI Design Consultant"}
+                </div>
+              </div>
+            </div>
+            <button onClick={() => setChatOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: C.light, fontSize: 16 }}>{"\u2715"}</button>
+          </div>
+
+          {/* Chat messages */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px" }}>
+            {chatMessages.length === 0 && !chatLoading && (
+              <div style={{ textAlign: "center", padding: "30px 16px" }}>
+                <div style={{ fontFamily: SANS, fontSize: 12, color: C.light, lineHeight: 1.7 }}>
+                  Ask me to update specs, suggest materials, refine the design, generate images, or anything else about this piece.
+                </div>
+              </div>
+            )}
+            {chatMessages.map((msg, i) => (
+              <div key={i}>
+                <AIChatMessage message={msg.content} isUser={msg.role === "user"} />
+                {msg.fieldUpdates?.map((u, j) => (
+                  <FieldUpdateToast key={j} field={u.field} value={u.value} />
+                ))}
+                {msg.suggestedTool && TOOL_INFO[msg.suggestedTool] && (
+                  <div style={{ padding: "3px 0 3px 30px" }}>
+                    <div onClick={() => {
+                      if (msg.suggestedTool === "render" || msg.suggestedTool === "sketch") handleGenerateDesign(msg.suggestedTool);
+                    }} style={{
+                      display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 10px",
+                      background: C.blueBg, border: `1px solid ${C.blueBorder}`, borderRadius: RS,
+                      cursor: "pointer", transition: "all 0.2s",
+                    }}>
+                      <span style={{ fontSize: 12 }}>{TOOL_INFO[msg.suggestedTool].icon}</span>
+                      <span style={{ fontFamily: SANS, fontSize: 9, fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase", color: C.blue }}>
+                        {TOOL_INFO[msg.suggestedTool].label}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+            {chatLoading && <TypingDots />}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Chat input */}
+          <div style={{ padding: "10px 14px", borderTop: `1px solid ${C.border}`, display: "flex", gap: 8, alignItems: "flex-end", background: C.white }}>
+            <div style={{ flex: 1, background: C.section, borderRadius: RS, border: `1px solid ${C.border}`, transition: "border-color 0.2s" }}>
+              <textarea
+                ref={chatInputRef}
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } }}
+                placeholder="Ask about this project..."
+                rows={1}
+                style={{
+                  width: "100%", padding: "10px 12px", fontFamily: SANS, fontSize: 12,
+                  color: C.dark, background: "transparent", border: "none", resize: "none",
+                  lineHeight: 1.5, minHeight: 38, maxHeight: 100, overflowY: "auto",
+                }}
+                onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 100) + "px"; }}
+                onFocus={(e) => e.target.parentElement.style.borderColor = C.borderHover}
+                onBlur={(e) => e.target.parentElement.style.borderColor = C.border}
+                disabled={chatLoading}
+              />
+            </div>
+            <button
+              onClick={sendChatMessage}
+              disabled={chatLoading || !chatInput.trim()}
+              style={{
+                width: 36, height: 36, borderRadius: RS, border: "none",
+                background: chatInput.trim() ? C.coral : C.border,
+                color: C.white, cursor: chatInput.trim() ? "pointer" : "default",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                transition: "all 0.2s", flexShrink: 0,
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 2L11 13" /><path d="M22 2L15 22L11 13L2 9L22 2Z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      </div>{/* end content + sidebar row */}
+    </>
   );
 }
