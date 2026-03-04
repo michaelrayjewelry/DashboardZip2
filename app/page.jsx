@@ -6,6 +6,7 @@ import ProductsView from "./components/ProductsView";
 import OrdersView from "./components/OrdersView";
 import ImagineView from "./components/ImagineView";
 import ProjectView from "./components/ProjectView";
+import NewProjectModal from "./components/NewProjectModal";
 
 // ─── Mock Data ───
 const PRIMARY_ACTIONS = [
@@ -359,7 +360,6 @@ function ToolModal({ tool, onClose }) {
   const is3d = tool.id === "3d-model";
   const isCollection = tool.id === "start-collection";
   const isFileHub = tool.id === "file-hub";
-  const isProject = tool.id === "new-project";
   const actionLabel = tool.actionLabel || "Generate with AI";
 
   return (
@@ -387,7 +387,7 @@ function ToolModal({ tool, onClose }) {
             {tool.title}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {(isProject || isCollection) && (
+            {isCollection && (
               <select style={{
                 fontFamily: SANS, fontSize: 11, fontWeight: 500, letterSpacing: 2, textTransform: "uppercase",
                 padding: "8px 28px 8px 14px", color: C.mid, background: C.white,
@@ -404,44 +404,6 @@ function ToolModal({ tool, onClose }) {
         </div>
 
         <div style={{ padding: "24px 36px 36px" }}>
-
-          {/* ── New Project body ── */}
-          {isProject && (
-            <>
-              <Section label="Client" rightAction={
-                <button style={{
-                  fontFamily: SANS, fontSize: 10.5, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase",
-                  padding: "9px 22px", background: C.coral, color: C.white, border: "none", borderRadius: RS,
-                  cursor: "pointer", transition: "background 0.2s",
-                }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = C.coralHover)}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = C.coral)}
-                >Send Update Email</button>
-              }>
-                <div style={{ display: "flex", gap: 40, flexWrap: "wrap" }}>
-                  {[{ label: "Email", value: "client@email.com" }, { label: "Name", value: "" }, { label: "Phone", value: "" },
-                    { label: "Created", value: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
-                  ].map((f, i) => (
-                    <div key={i} style={{ minWidth: 120 }}>
-                      <div style={{ ...labelStyle, fontSize: 9.5 }}>{f.label}</div>
-                      <div style={{ fontFamily: SANS, fontSize: 13, color: C.dark, fontWeight: 500 }}>{f.value || "\u2014"}</div>
-                    </div>
-                  ))}
-                </div>
-              </Section>
-              <Section label="Reference Image">
-                <ImageDropZone dragOver={dragOver} setDragOver={setDragOver} />
-              </Section>
-              <Section label="Specifications">
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "20px 32px" }}>
-                  {["Jewelry Type", "Name", "Budget", "Size", "Gender", "Metal", "Metal Karat", "Main Gemstone", "Gemstone Shape", "Setting Type", "Band Style", "Ring Type"].map((l) => (
-                    <ModalField key={l} label={l} />
-                  ))}
-                  <ModalField label="Description" wide textarea />
-                </div>
-              </Section>
-            </>
-          )}
 
           {/* ── Start a Collection body ── */}
           {isCollection && (
@@ -1108,7 +1070,11 @@ export default function ZipJewelerDashboard() {
       </main>
 
       {/* ═══ Tool Modal ═══ */}
-      <ToolModal tool={activeTool} onClose={() => setActiveTool(null)} />
+      {activeTool?.id === "new-project" ? (
+        <NewProjectModal onClose={() => setActiveTool(null)} />
+      ) : (
+        <ToolModal tool={activeTool} onClose={() => setActiveTool(null)} />
+      )}
     </div>
   );
 }
