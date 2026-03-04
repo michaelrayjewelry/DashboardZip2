@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { C, SERIF, SANS, MONO, R, RS } from "./shared";
+import { C, SERIF, SANS, MONO, R, RS, BASE_PATH } from "./shared";
 
 // ─── SYSTEM PROMPT ───
 const SYSTEM_PROMPT = `You are the ZipJeweler AI Design Consultant — a master jeweler's creative partner embedded inside ZipJeweler, a SaaS platform for custom jewelry production workflow.
@@ -437,7 +437,7 @@ export default function ImagineView() {
     setStarted(true);
     setIsLoading(true);
     try {
-      const resp = await fetch("/api/chat", {
+      const resp = await fetch(`${BASE_PATH}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -489,7 +489,7 @@ export default function ImagineView() {
     const newHistory = [...conversationHistory, { role: "user", content: text }];
 
     try {
-      const resp = await fetch("/api/chat", {
+      const resp = await fetch(`${BASE_PATH}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
