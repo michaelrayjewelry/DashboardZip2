@@ -353,20 +353,62 @@ function PipelineBar({ current }) {
   );
 }
 
-// ─── MATERIAL ROW ───
-function MaterialRow({ name, spec, qty, unit, unitCost, total }) {
+// ─── BOM HELPERS ───
+const KARAT_PURITY = { "10k": "417", "14k": "585", "18k": "750", "22k": "916", "24k": "999" };
+let _bomUid = 0;
+const newBomId = () => "row-" + Date.now() + "-" + (++_bomUid);
+
+function buildDefaultBom(f) {
+  if (!f) f = {};
+  const metalName = f.metal || "Yellow Gold";
+  const karat = f.metalKarat || "14k";
+  const rows = [
+    { id: "metal", category: "material", name: metalName, spec: `${karat} (${KARAT_PURITY[karat] || karat})`, qty: parseFloat(f.weight) || 0, unit: "grams", unitCost: 52 },
+    { id: "casting", category: "labor", name: "Casting", spec: "Lost wax, single", qty: 1, unit: "piece", unitCost: 85 },
+    { id: "labor-cad", category: "labor", name: "Labor \u2013 CAD", spec: "Custom design", qty: 4, unit: "hours", unitCost: 65 },
+    { id: "labor-setting", category: "labor", name: "Labor \u2013 Setting", spec: f.settingType || "", qty: 0, unit: "hours", unitCost: 55 },
+    { id: "labor-finishing", category: "labor", name: "Labor \u2013 Finishing", spec: "Polish, QC", qty: 2, unit: "hours", unitCost: 45 },
+  ];
+  if (f.mainGemstone) {
+    rows.splice(1, 0, { id: "gemstone", category: "material", name: f.mainGemstone, spec: [f.gemstoneShape, f.gemstoneSize].filter(Boolean).join(", "), qty: parseFloat(f.numberOfStones) || 1, unit: "stones", unitCost: 0 });
+  }
+  return rows;
+}
+
+// ─── EDITABLE MATERIAL ROW ───
+function MaterialRow({ row, onChange, onDelete }) {
+  const total = ((parseFloat(row.qty) || 0) * (parseFloat(row.unitCost) || 0));
+  const cellStyle = (align, mono) => ({
+    width: "100%", padding: "4px 2px", fontFamily: mono ? MONO : SANS, fontSize: 12.5, color: C.dark,
+    background: "transparent", border: "none", borderBottom: `1px solid ${C.borderInput}`,
+    textAlign: align || "left", outline: "none",
+  });
+  const cell = (field, align, mono) => (
+    <input
+      key={row.id + "-" + field + "-" + String(row[field])}
+      defaultValue={row[field] ?? ""}
+      onBlur={(e) => {
+        const v = e.target.value.trim();
+        if (v !== String(row[field] ?? "")) {
+          const val = (field === "qty" || field === "unitCost") ? (parseFloat(v) || 0) : v;
+          onChange({ ...row, [field]: val });
+        }
+      }}
+      style={cellStyle(align, mono)}
+    />
+  );
   return (
     <div style={{
-      display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr 1fr",
-      gap: 8, padding: "10px 0", borderBottom: `1px solid ${C.border}`,
-      fontFamily: SANS, fontSize: 12.5, color: C.dark, alignItems: "center",
+      display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr 1fr 24px",
+      gap: 8, padding: "6px 0", borderBottom: `1px solid ${C.border}`, alignItems: "center",
     }}>
-      <span style={{ fontWeight: 500 }}>{name}</span>
-      <span style={{ color: C.mid }}>{spec}</span>
-      <span style={{ fontFamily: MONO, textAlign: "right" }}>{qty}</span>
-      <span style={{ color: C.light }}>{unit}</span>
-      <span style={{ fontFamily: MONO, textAlign: "right" }}>${unitCost}</span>
-      <span style={{ fontFamily: MONO, textAlign: "right", fontWeight: 600 }}>${total}</span>
+      {cell("name")}
+      {cell("spec")}
+      {cell("qty", "right", true)}
+      {cell("unit")}
+      {cell("unitCost", "right", true)}
+      <span style={{ fontFamily: MONO, fontSize: 12.5, textAlign: "right", fontWeight: 600, color: C.dark }}>${total.toFixed(2)}</span>
+      <button onClick={onDelete} style={{ background: "none", border: "none", cursor: "pointer", color: C.light, fontSize: 15, padding: 0, lineHeight: 1 }}>{"\u00D7"}</button>
     </div>
   );
 }
@@ -452,6 +494,53 @@ export default function ProjectView({ onBack, projectId }) {
   const [revision, setRevision] = useState(0);
   const [previewImage, setPreviewImage] = useState(null);
 
+  // ─── BOM & Pricing state ───
+  const [bom, setBom] = useState(() => {
+    const stored = storedProject?.fields?.bom;
+    return stored && stored.length > 0 ? stored : buildDefaultBom(storedProject?.fields || {});
+  });
+  const [metalMarket, setMetalMarket] = useState(() => {
+    const stored = storedProject?.fields?.metalMarket;
+    return stored || { goldSpot: 2870, perGram14k: 52 };
+  });
+  const [markup, setMarkup] = useState(() => {
+    return parseFloat(storedProject?.fields?.markup) || 45;
+  });
+
+  const saveBom = useCallback((newBom) => {
+    setBom(newBom);
+    if (projectId) updateProject(projectId, { fields: { bom: newBom } });
+  }, [projectId]);
+
+  const saveMetalMarket = useCallback((newMarket) => {
+    setMetalMarket(newMarket);
+    if (projectId) updateProject(projectId, { fields: { metalMarket: newMarket } });
+  }, [projectId]);
+
+  const saveMarkup = useCallback((val) => {
+    setMarkup(val);
+    if (projectId) updateProject(projectId, { fields: { markup: val } });
+  }, [projectId]);
+
+  const handleBomChange = useCallback((updated) => {
+    const next = bom.map((r) => r.id === updated.id ? updated : r);
+    saveBom(next);
+  }, [bom, saveBom]);
+
+  const handleBomAdd = useCallback(() => {
+    saveBom([...bom, { id: newBomId(), category: "material", name: "", spec: "", qty: 0, unit: "piece", unitCost: 0 }]);
+  }, [bom, saveBom]);
+
+  const handleBomDelete = useCallback((id) => {
+    saveBom(bom.filter((r) => r.id !== id));
+  }, [bom, saveBom]);
+
+  // Computed pricing
+  const materialTotal = bom.filter((r) => r.category === "material").reduce((s, r) => s + (parseFloat(r.qty) || 0) * (parseFloat(r.unitCost) || 0), 0);
+  const laborTotal = bom.filter((r) => r.category !== "material").reduce((s, r) => s + (parseFloat(r.qty) || 0) * (parseFloat(r.unitCost) || 0), 0);
+  const bomSubtotal = materialTotal + laborTotal;
+  const retailPrice = bomSubtotal * (1 + markup / 100);
+
   const saveField = useCallback((fieldKey, value) => {
     if (!projectId) return;
     const updates = { fields: { [fieldKey]: value } };
@@ -459,6 +548,32 @@ export default function ProjectView({ onBack, projectId }) {
     updateProject(projectId, updates);
     setRevision((r) => r + 1);
   }, [projectId]);
+
+  // ─── One-way sync: project fields → BOM (does NOT flow back) ───
+  const prevFieldsRef = useRef({});
+  useEffect(() => {
+    if (!storedProject?.fields) return;
+    const f = storedProject.fields;
+    const pf = prevFieldsRef.current;
+    let changed = false;
+    const next = bom.map((r) => ({ ...r }));
+    const metalRow = next.find((r) => r.id === "metal");
+    if (metalRow) {
+      if (f.metal && f.metal !== pf.metal) { metalRow.name = f.metal; changed = true; }
+      if (f.metalKarat && f.metalKarat !== pf.metalKarat) { metalRow.spec = `${f.metalKarat} (${KARAT_PURITY[f.metalKarat] || f.metalKarat})`; changed = true; }
+      if (f.weight && f.weight !== pf.weight) { metalRow.qty = parseFloat(f.weight) || metalRow.qty; changed = true; }
+    }
+    const gemRow = next.find((r) => r.id === "gemstone");
+    if (gemRow) {
+      if (f.mainGemstone && f.mainGemstone !== pf.mainGemstone) { gemRow.name = f.mainGemstone; changed = true; }
+      if (f.gemstoneShape && f.gemstoneShape !== pf.gemstoneShape) { gemRow.spec = [f.gemstoneShape, f.gemstoneSize].filter(Boolean).join(", "); changed = true; }
+    }
+    const settingRow = next.find((r) => r.id === "labor-setting");
+    if (settingRow && f.settingType && f.settingType !== pf.settingType) { settingRow.spec = f.settingType; changed = true; }
+    prevFieldsRef.current = { ...f, bom: undefined, metalMarket: undefined, markup: undefined };
+    if (changed) saveBom(next);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revision]);
 
   const handleGenerateDesign = async (style) => {
     if (genState.loading) return;
@@ -982,47 +1097,84 @@ export default function ProjectView({ onBack, projectId }) {
         {/* ════════════════════════════════════════ */}
         {activeTab === "materials" && (
           <>
-            <Section label="Bill of Materials">
+            <Section label="Bill of Materials" rightAction={<SmallBtn label="+ Add Line Item" onClick={handleBomAdd} />}>
               {/* Table header */}
               <div style={{
-                display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr 1fr", gap: 8,
+                display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr 1fr 24px", gap: 8,
                 padding: "0 0 8px", borderBottom: `2px solid ${C.border}`,
                 fontFamily: SANS, fontSize: 9.5, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase", color: C.label,
               }}>
                 <span>Material</span><span>Specification</span><span style={{ textAlign: "right" }}>Qty</span>
                 <span>Unit</span><span style={{ textAlign: "right" }}>$/Unit</span><span style={{ textAlign: "right" }}>Total</span>
+                <span />
               </div>
-              <MaterialRow name="Yellow Gold" spec="14k (585)" qty="8.2" unit="grams" unitCost="52.00" total="426.40" />
-              <MaterialRow name="Casting" spec="Lost wax, single" qty="1" unit="piece" unitCost="85.00" total="85.00" />
-              <MaterialRow name="Labor – CAD" spec="Custom design, 3 revisions" qty="4" unit="hours" unitCost="65.00" total="260.00" />
-              <MaterialRow name="Labor – Setting" spec="N/A — no stones" qty="0" unit="hours" unitCost="0" total="0.00" />
-              <MaterialRow name="Labor – Finishing" spec="Polish, QC" qty="2" unit="hours" unitCost="45.00" total="90.00" />
 
+              {/* Material rows */}
+              {bom.filter((r) => r.category === "material").length > 0 && (
+                <div style={{ fontFamily: SANS, fontSize: 9, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase", color: C.light, padding: "10px 0 2px" }}>Materials</div>
+              )}
+              {bom.filter((r) => r.category === "material").map((row) => (
+                <MaterialRow key={row.id} row={row} onChange={handleBomChange} onDelete={() => handleBomDelete(row.id)} />
+              ))}
+              {bom.filter((r) => r.category === "material").length > 0 && (
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr 1fr 24px", gap: 8, padding: "6px 0 2px" }}>
+                  <span style={{ gridColumn: "1 / 6", textAlign: "right", fontFamily: SANS, fontSize: 9.5, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase", color: C.mid }}>Materials Subtotal</span>
+                  <span style={{ fontFamily: MONO, fontSize: 12, textAlign: "right", color: C.mid }}>${materialTotal.toFixed(2)}</span>
+                  <span />
+                </div>
+              )}
+
+              {/* Labor rows */}
+              {bom.filter((r) => r.category !== "material").length > 0 && (
+                <div style={{ fontFamily: SANS, fontSize: 9, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase", color: C.light, padding: "10px 0 2px" }}>Labor & Services</div>
+              )}
+              {bom.filter((r) => r.category !== "material").map((row) => (
+                <MaterialRow key={row.id} row={row} onChange={handleBomChange} onDelete={() => handleBomDelete(row.id)} />
+              ))}
+              {bom.filter((r) => r.category !== "material").length > 0 && (
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr 1fr 24px", gap: 8, padding: "6px 0 2px" }}>
+                  <span style={{ gridColumn: "1 / 6", textAlign: "right", fontFamily: SANS, fontSize: 9.5, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase", color: C.mid }}>Labor Subtotal</span>
+                  <span style={{ fontFamily: MONO, fontSize: 12, textAlign: "right", color: C.mid }}>${laborTotal.toFixed(2)}</span>
+                  <span />
+                </div>
+              )}
+
+              {/* Grand total */}
               <div style={{
-                display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr 1fr", gap: 8,
-                padding: "14px 0 0", fontFamily: SANS, fontSize: 13, fontWeight: 600, color: C.black,
+                display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr 1fr 24px", gap: 8,
+                padding: "14px 0 0", borderTop: `2px solid ${C.border}`, marginTop: 8,
+                fontFamily: SANS, fontSize: 13, fontWeight: 600, color: C.black,
               }}>
                 <span style={{ gridColumn: "1 / 6", textAlign: "right", letterSpacing: 2, textTransform: "uppercase", fontSize: 10.5 }}>Subtotal</span>
-                <span style={{ fontFamily: MONO, textAlign: "right" }}>$861.40</span>
+                <span style={{ fontFamily: MONO, textAlign: "right" }}>${bomSubtotal.toFixed(2)}</span>
+                <span />
               </div>
             </Section>
 
             <Section label="Pricing">
               <div style={{ display: "flex", flexWrap: "wrap", gap: "18px 32px" }}>
-                <Field label="Material Cost" value="$426.40" readOnly />
-                <Field label="Labor Cost" value="$435.00" readOnly />
-                <Field label="Markup %" value="45%" />
-                <Field label="Retail Price" value="$1,249.03" readOnly />
-                <Field label="Client Budget" value="" />
-                <Field label="Deposit Received" value="" />
+                <Field key={"mc-" + materialTotal} label="Material Cost" value={"$" + materialTotal.toFixed(2)} readOnly />
+                <Field key={"lc-" + laborTotal} label="Labor Cost" value={"$" + laborTotal.toFixed(2)} readOnly />
+                <Field label="Markup %" value={String(markup)} onChange={(v) => { const n = parseFloat(v.replace("%", "")) || 0; saveMarkup(n); }} />
+                <Field key={"rp-" + retailPrice} label="Retail Price" value={"$" + retailPrice.toFixed(2)} readOnly />
+                <Field label="Client Budget" value={project.fields.budget || ""} onChange={(v) => saveField("budget", v)} />
+                <Field label="Deposit Received" value={project.fields.depositReceived || ""} onChange={(v) => saveField("depositReceived", v)} />
               </div>
             </Section>
 
             <Section label="Metal Market" collapsed={collapseState.market} onToggle={() => toggle("market")}>
               <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
-                <InfoField label="Gold Spot (oz)" value="$2,870.00" />
-                <InfoField label="14k Per Gram" value="$52.00" />
-                <InfoField label="Last Updated" value="Mar 3, 2026" />
+                <Field label="Gold Spot (oz)" value={String(metalMarket.goldSpot.toFixed(2))} mono onChange={(v) => {
+                  const n = parseFloat(v.replace(/[$,]/g, "")) || 0;
+                  saveMetalMarket({ ...metalMarket, goldSpot: n });
+                }} />
+                <Field label="14k Per Gram" value={String(metalMarket.perGram14k.toFixed(2))} mono onChange={(v) => {
+                  const n = parseFloat(v.replace(/[$,]/g, "")) || 0;
+                  saveMetalMarket({ ...metalMarket, perGram14k: n });
+                  // Also update metal row unitCost in BOM
+                  saveBom(bom.map((r) => r.id === "metal" ? { ...r, unitCost: n } : r));
+                }} />
+                <InfoField label="Last Updated" value={new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} />
               </div>
               <div style={{ marginTop: 12, fontFamily: SANS, fontSize: 11.5, color: C.light }}>
                 Metal prices are estimates. Final cost calculated at time of casting.
