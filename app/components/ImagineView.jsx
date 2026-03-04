@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { C, SERIF, SANS, MONO, R, RS, BASE_PATH } from "./shared";
+import { C, SERIF, SANS, MONO, R, RS, ANTHROPIC_KEY } from "./shared";
 
 // ─── SYSTEM PROMPT ───
 const SYSTEM_PROMPT = `You are the ZipJeweler AI Design Consultant — a master jeweler's creative partner embedded inside ZipJeweler, a SaaS platform for custom jewelry production workflow.
@@ -437,9 +437,14 @@ export default function ImagineView() {
     setStarted(true);
     setIsLoading(true);
     try {
-      const resp = await fetch(`${BASE_PATH}/api/chat`, {
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_KEY,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 1000,
@@ -489,9 +494,14 @@ export default function ImagineView() {
     const newHistory = [...conversationHistory, { role: "user", content: text }];
 
     try {
-      const resp = await fetch(`${BASE_PATH}/api/chat`, {
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_KEY,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 1000,
