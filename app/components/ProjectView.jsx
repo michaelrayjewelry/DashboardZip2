@@ -7,7 +7,82 @@ import {
 } from "../lib/storage";
 import { generateImage, chatWithClaudeJSON } from "../lib/api";
 
-// ─── SYSTEM PROMPT (for in-project Imagine bot) ───
+// ─── SYSTEM PROMPTS ───
+
+// Used for projects that originated from Imagine (preserves conversation continuity)
+const IMAGINE_SYSTEM_PROMPT = `You are the ZipJeweler AI Design Consultant — a master jeweler's creative partner embedded inside ZipJeweler, a SaaS platform for custom jewelry production workflow.
+
+Your role is to help jewelers and designers create complete project folders for custom jewelry pieces through natural, warm conversation. You are knowledgeable about jewelry design, manufacturing, gemstones, metals, CAD processes, casting methods, and the full lifecycle of a custom piece.
+
+CONVERSATION STYLE:
+- Be warm, creative, and inspiring — like a knowledgeable friend in the jewelry world
+- Ask one or two focused questions at a time, never overwhelm
+- Build on what the user shares, making connections and suggestions
+- Use vivid language when describing design possibilities
+- Be opinionated — suggest specific ideas, not just ask questions
+- Celebrate good ideas with genuine enthusiasm
+
+CONTEXT: The user has moved from the Imagine chat into their project folder. Continue the conversation naturally — they may want to refine details, make changes, generate images, or continue building out the project. Do NOT re-introduce yourself or start over.
+
+CORE FLOW — guide the conversation through these areas naturally (not rigidly):
+1. VISION — What's the piece? What's the inspiration? Who's it for?
+2. TYPE & STYLE — Ring, pendant, bracelet, etc. Style era, motifs, mood.
+3. MATERIALS — Metal type, karat, finish. Any gemstones?
+4. DIMENSIONS — Size, weight targets, proportions.
+5. TECHNICAL — Manufacturing notes, special considerations.
+6. BUDGET & TIMELINE — Price range, deadline.
+7. CLIENT — Who's the client? Contact info?
+
+TOOLS — When appropriate, suggest ZipJeweler tools:
+- "Sketch to Jewelry" — when they describe a visual concept
+- "AI Render" — when specs are solid enough to visualize
+- "Cost Estimate" — when materials are discussed
+- "3D Model" — when CAD is needed
+- "File Hub" — when organizing assets
+
+RESPONSE FORMAT:
+You must ALWAYS respond with valid JSON only. No markdown, no backticks, no preamble. Just the JSON object:
+{
+  "message": "Your conversational response here",
+  "extracted": {
+    "name": "project name if mentioned or you can infer one",
+    "type": "ring|pendant|bracelet|necklace|earrings|brooch|cufflinks|other",
+    "description": "running description of the piece",
+    "metal": "e.g. 14k Yellow Gold",
+    "metalKarat": "e.g. 14k",
+    "finish": "e.g. High Polish, Matte, Brushed, Satin",
+    "mainGemstone": "e.g. 1.5ct Round Diamond",
+    "gemstoneShape": "e.g. Round Brilliant",
+    "settingType": "e.g. Prong, Bezel, Pavé, Channel",
+    "sideStones": "e.g. 0.3ct Pavé Diamonds",
+    "size": "ring size, chain length, etc.",
+    "bandWidth": "e.g. 4mm",
+    "bandStyle": "e.g. Comfort Fit, Knife Edge, Cathedral",
+    "weight": "estimated weight",
+    "budget": "budget range",
+    "timeline": "deadline or timeline",
+    "clientName": "client name",
+    "clientEmail": "client email",
+    "collection": "collection name if mentioned",
+    "designMotif": "e.g. Floral, Art Deco, Serpentine",
+    "castingMethod": "e.g. Lost Wax",
+    "specialNotes": "any special manufacturing or design notes"
+  },
+  "suggestedTool": "sketch|render|estimate|3d|filehub|null",
+  "suggestedToolReason": "why this tool would help right now",
+  "projectReadiness": 0-100
+}
+
+RULES FOR "extracted":
+- Only include fields that have been explicitly mentioned or can be clearly inferred
+- Leave fields as null if not yet discussed
+- Update fields as the conversation evolves — later info overrides earlier
+- The "description" field should be a running summary that gets richer over time
+- "projectReadiness" is your estimate of how complete the project folder is (0-100)
+
+Remember: You are building a REAL production project folder. Every detail matters. Guide them to completeness but never force it — some pieces are simple, some are complex.`;
+
+// Used for projects created manually (not from Imagine)
 const PROJECT_SYSTEM_PROMPT = `You are the ZipJeweler AI Design Consultant — a master jeweler's creative partner embedded inside a project folder in ZipJeweler, a SaaS platform for custom jewelry production workflow.
 
 You are chatting inside an EXISTING project folder. The user already has a project with details filled in. Your job is to:
@@ -58,6 +133,51 @@ RULES FOR "extracted":
 - Only include fields that the user explicitly wants to change or that you are suggesting changes for
 - Leave fields as null if not being updated
 - Only suggest field changes when the user asks for them or when it naturally follows from the conversation`;
+
+// Hidden system messages that should not appear in the chat display
+const HIDDEN_MSG_PREFIXES = [
+  "Start the conversation",
+  "The user is working on a project called",
+];
+function isHiddenMessage(content) {
+  return HIDDEN_MSG_PREFIXES.some((p) => content.startsWith(p));
+}
+
+/**
+ * Reconstruct display messages from raw conversation history.
+ * Extracts fieldUpdates, suggestedTool, etc. from assistant JSON.
+ */
+function rebuildDisplayMessages(history) {
+  const msgs = [];
+  for (const h of history) {
+    if (h.role === "user") {
+      if (!isHiddenMessage(h.content)) {
+        msgs.push({ role: "user", content: h.content });
+      }
+    } else if (h.role === "assistant") {
+      try {
+        const parsed = JSON.parse(h.content);
+        // Reconstruct field updates by comparing with previous state
+        const fieldUpdates = [];
+        if (parsed.extracted) {
+          Object.entries(parsed.extracted).forEach(([key, val]) => {
+            if (val) fieldUpdates.push({ field: key, value: val });
+          });
+        }
+        msgs.push({
+          role: "assistant",
+          content: parsed.message,
+          fieldUpdates: fieldUpdates.length > 0 ? fieldUpdates : undefined,
+          suggestedTool: parsed.suggestedTool || undefined,
+          suggestedToolReason: parsed.suggestedToolReason || undefined,
+        });
+      } catch {
+        msgs.push({ role: "assistant", content: h.content });
+      }
+    }
+  }
+  return msgs;
+}
 
 // ─── FIELD CONFIG ───
 const FIELD_LABELS = {
@@ -425,6 +545,7 @@ export default function ProjectView({ onBack, projectId }) {
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [conversationHistory, setConversationHistory] = useState([]);
+  const [chatSource, setChatSource] = useState(null); // "imagine" or null
   const chatEndRef = useRef(null);
   const chatInputRef = useRef(null);
 
@@ -441,25 +562,12 @@ export default function ProjectView({ onBack, projectId }) {
       setProjectName(storedProject.name || "Untitled Project");
       setProjectStatus(storedProject.status || "draft");
       setProjectStage(storedProject.stage || "concept");
-      // Load existing chat history
+      setChatSource(storedProject.chatSource || null);
+      // Load existing chat history and fully reconstruct display messages
       const history = getChatHistory(projectId);
       if (history && history.length > 0) {
         setConversationHistory(history);
-        // Rebuild display messages from history
-        const displayMsgs = [];
-        for (const h of history) {
-          if (h.role === "user" && !h.content.startsWith("Start the conversation")) {
-            displayMsgs.push({ role: "user", content: h.content });
-          } else if (h.role === "assistant") {
-            try {
-              const parsed = JSON.parse(h.content);
-              displayMsgs.push({ role: "assistant", content: parsed.message });
-            } catch {
-              displayMsgs.push({ role: "assistant", content: h.content });
-            }
-          }
-        }
-        setChatMessages(displayMsgs);
+        setChatMessages(rebuildDisplayMessages(history));
       }
     }
   }, [projectId]);
@@ -593,6 +701,11 @@ export default function ProjectView({ onBack, projectId }) {
   };
 
   // ─── AI Chat (in-project Imagine bot) ───
+  // Use Imagine prompt for projects that originated from Imagine, otherwise use the project prompt
+  const getSystemPrompt = useCallback(() => {
+    return chatSource === "imagine" ? IMAGINE_SYSTEM_PROMPT : PROJECT_SYSTEM_PROMPT;
+  }, [chatSource]);
+
   const buildContextMessage = () => {
     const filledFields = Object.entries(fields).filter(([_, v]) => v);
     if (filledFields.length === 0) return "";
@@ -600,12 +713,12 @@ export default function ProjectView({ onBack, projectId }) {
   };
 
   const startChat = useCallback(async () => {
-    if (chatMessages.length > 0) return; // Already started
+    if (chatMessages.length > 0) return; // Already has messages (loaded from history or started)
     setChatLoading(true);
     try {
       const contextMsg = `The user is working on a project called "${projectName}". Here are the current project details:${buildContextMessage()}\n\nGreet them briefly and ask how you can help with this project.`;
       const parsed = await chatWithClaudeJSON({
-        system: PROJECT_SYSTEM_PROMPT,
+        system: getSystemPrompt(),
         messages: [{ role: "user", content: contextMsg }],
         maxTokens: 800,
         fallback: { extracted: {}, suggestedTool: null },
@@ -622,7 +735,7 @@ export default function ProjectView({ onBack, projectId }) {
       setChatMessages([{ role: "assistant", content: "How can I help refine this project?" }]);
     }
     setChatLoading(false);
-  }, [projectName, fields, chatMessages.length, projectId]);
+  }, [projectName, fields, chatMessages.length, projectId, getSystemPrompt]);
 
   const sendChatMessage = useCallback(async () => {
     const text = chatInput.trim();
@@ -636,7 +749,7 @@ export default function ProjectView({ onBack, projectId }) {
 
     try {
       const parsed = await chatWithClaudeJSON({
-        system: PROJECT_SYSTEM_PROMPT,
+        system: getSystemPrompt(),
         messages: newHistory,
         maxTokens: 1000,
         fallback: { extracted: {}, suggestedTool: null },
@@ -669,7 +782,7 @@ export default function ProjectView({ onBack, projectId }) {
     }
     setChatLoading(false);
     setTimeout(() => chatInputRef.current?.focus(), 100);
-  }, [chatInput, chatLoading, conversationHistory, fields, projectId, handleFieldChange]);
+  }, [chatInput, chatLoading, conversationHistory, fields, projectId, handleFieldChange, getSystemPrompt]);
 
   // ─── Derived data ───
   const filesByCategory = projectId ? getProjectFilesByCategory(projectId) : {};
@@ -1068,7 +1181,9 @@ export default function ProjectView({ onBack, projectId }) {
               </div>
               <div>
                 <div style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 600, color: C.black, letterSpacing: 3, textTransform: "uppercase" }}>Imagine</div>
-                <div style={{ fontFamily: SANS, fontSize: 10, color: C.light }}>AI Design Consultant for this project</div>
+                <div style={{ fontFamily: SANS, fontSize: 10, color: C.light }}>
+                  {chatSource === "imagine" && chatMessages.length > 0 ? "Continuing from Imagine session" : "AI Design Consultant for this project"}
+                </div>
               </div>
             </div>
 

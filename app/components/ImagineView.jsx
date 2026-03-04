@@ -528,9 +528,10 @@ export default function ImagineView({ onProjectCreated }) {
     setStarted(true);
     setIsLoading(true);
 
-    // Create a persistent project
+    // Create a persistent project, tagged as originating from Imagine
     const newProject = createProject({ name: "Untitled Project" });
     setProjectId(newProject.id);
+    updateProject(newProject.id, { chatSource: "imagine" });
 
     try {
       const startMsg = "Start the conversation. Greet me and ask what we're imagining today.";
