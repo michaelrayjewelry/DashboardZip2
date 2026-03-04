@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { C, SERIF, SANS, MONO, R, RS, BASE_PATH } from "./shared";
+import { C, SERIF, SANS, MONO, R, RS, ANTHROPIC_KEY } from "./shared";
 
 // ═══════════════════════════════════════
 // JEWELRY TYPE CONFIGURATION
@@ -354,9 +354,14 @@ AVAILABLE FIELD KEYS: ${allFields.map((f) => f.key).join(", ")}`;
     setIsLoading(true);
     try {
       const contextMsg = `${buildContext()}\n\nStart the conversation. Greet the jeweler and ask what piece they're creating today. Be brief.`;
-      const resp = await fetch(`${BASE_PATH}/api/chat`, {
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_KEY,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 800,
@@ -401,9 +406,14 @@ AVAILABLE FIELD KEYS: ${allFields.map((f) => f.key).join(", ")}`;
     const newHistory = [...conversationHistory, { role: "user", content: userContent }];
 
     try {
-      const resp = await fetch(`${BASE_PATH}/api/chat`, {
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_KEY,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 800,

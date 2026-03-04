@@ -16,3 +16,4 @@ export const MONO = "'DM Mono', monospace";
 export const R = 8;
 export const RS = 6;
 export const BASE_PATH = "/DashboardZip2";
+export const ANTHROPIC_KEY = process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY || "";
