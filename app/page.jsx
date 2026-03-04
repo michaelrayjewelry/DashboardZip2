@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { C, SERIF, SANS, MONO, R, RS } from "./components/shared";
 import ProductsView from "./components/ProductsView";
 import OrdersView from "./components/OrdersView";
@@ -352,8 +352,8 @@ function ImageDropZone({ dragOver, setDragOver, large }) {
 
 // ─── Tool Modal ───
 function ToolModal({ tool, onClose }) {
-  if (!tool) return null;
   const [dragOver, setDragOver] = useState(false);
+  if (!tool) return null;
 
   const isImageTool = ["sketch-to-jewelry", "technical-to-image", "image-to-marketing"].includes(tool.id);
   const isEstimate = tool.id === "manufacture-estimate";
@@ -892,11 +892,6 @@ function DashboardContent({ onNavigate, onOpenTool }) {
 export default function ZipJewelerDashboard() {
   const [activeNav, setActiveNav] = useState("dashboard");
   const [activeTool, setActiveTool] = useState(null);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    setTimeout(() => setLoaded(true), 50);
-  }, []);
 
   const handleNavigate = (target) => {
     setActiveNav(target);
@@ -1018,8 +1013,7 @@ export default function ZipJewelerDashboard() {
           flex: 1,
           marginLeft: 200,
           minHeight: "100vh",
-          opacity: loaded ? 1 : 0,
-          transition: "opacity 0.4s ease",
+          animation: "fadeIn 0.4s ease",
         }}
       >
         {activeNav === "dashboard" && (

@@ -415,9 +415,9 @@ function TimelineItem({ title, detail, time, accent }) {
 // ORDER DETAIL DRAWER
 // ═══════════════════════════════════════
 function OrderDrawer({ order, onClose }) {
-  if (!order) return null;
   const [tab, setTab] = useState("overview");
   const [colState, setCol] = useState({});
+  if (!order) return null;
   const toggle = (k) => setCol((s) => ({ ...s, [k]: !s[k] }));
 
   const TABS = [
