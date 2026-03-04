@@ -1,36 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-
-// ─── Design System (matching existing ZipJeweler palette) ───
-const C = {
-  sidebarBg: "#2E2E2A",
-  sidebarText: "#A8A89C",
-  sidebarActive: "#C8D8A0",
-  sidebarActiveBg: "rgba(200,216,160,0.1)",
-  bg: "#F2F1EF",
-  section: "#F7F6F4",
-  white: "#FFFFFF",
-  black: "#1A1A18",
-  dark: "#333330",
-  mid: "#6E6E68",
-  light: "#9E9E96",
-  label: "#8A8A82",
-  border: "#E6E5E2",
-  borderInput: "#D4D3CF",
-  borderHover: "#B8B7B2",
-  coral: "#E66B6B",
-  coralHover: "#D45A5A",
-  green: "#5A8A4A",
-  blue: "#4A78A8",
-  amber: "#C89E3A",
-};
-
-const SERIF = "'Cormorant Garamond', Georgia, serif";
-const SANS = "'DM Sans', 'Helvetica Neue', sans-serif";
-const MONO = "'DM Mono', monospace";
-const R = 8;
-const RS = 6;
+import { C, SERIF, SANS, MONO, R, RS } from "./components/shared";
+import ProductsView from "./components/ProductsView";
+import OrdersView from "./components/OrdersView";
+import ImagineView from "./components/ImagineView";
+import ProjectView from "./components/ProjectView";
 
 // ─── Mock Data ───
 const TOOLS = [
@@ -203,10 +178,11 @@ function ToolCard({ title, sub, onClick }) {
 }
 
 // ─── Project Row ───
-function ProjectRow({ project }) {
+function ProjectRow({ project, onClick }) {
   const [h, setH] = useState(false);
   return (
     <div
+      onClick={onClick}
       onMouseEnter={() => setH(true)}
       onMouseLeave={() => setH(false)}
       style={{
@@ -222,7 +198,6 @@ function ProjectRow({ project }) {
         marginBottom: 6,
       }}
     >
-      {/* Thumbnail placeholder */}
       <div
         style={{
           width: 44,
@@ -519,7 +494,6 @@ function ToolModal({ tool, onClose }) {
                   />
                 </div>
               ))}
-              {/* Description textarea */}
               <div style={{ flex: "1 1 100%", minWidth: "100%" }}>
                 <div
                   style={{
@@ -677,6 +651,321 @@ function UsersIcon({ color = C.sidebarText }) {
   );
 }
 
+function ImagineIcon({ color = C.sidebarText }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  );
+}
+
+// ─── Dashboard Content ───
+function DashboardContent({ onNavigate, onOpenTool }) {
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    return "Good evening";
+  };
+
+  return (
+    <>
+      {/* ─── Header Bar ─── */}
+      <header
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "16px 44px",
+          background: C.white,
+          borderBottom: `1px solid ${C.border}`,
+          position: "sticky",
+          top: 0,
+          zIndex: 40,
+        }}
+      >
+        <div style={{ position: "relative", flex: "0 1 420px" }}>
+          <div
+            style={{
+              position: "absolute",
+              left: 14,
+              top: "50%",
+              transform: "translateY(-50%)",
+              display: "flex",
+              alignItems: "center",
+            }}
+          >
+            <SearchIcon color={C.light} size={15} />
+          </div>
+          <input
+            placeholder="Search projects, tools, orders..."
+            style={{
+              width: "100%",
+              padding: "11px 16px 11px 40px",
+              fontFamily: SANS,
+              fontSize: 13,
+              color: C.dark,
+              background: C.section,
+              border: `1px solid ${C.border}`,
+              borderRadius: R,
+              outline: "none",
+              transition: "border-color 0.2s, background 0.2s",
+            }}
+            onFocus={(e) => {
+              e.target.style.borderColor = C.borderHover;
+              e.target.style.background = C.white;
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = C.border;
+              e.target.style.background = C.section;
+            }}
+          />
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <button
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: R,
+              border: `1px solid ${C.border}`,
+              background: C.white,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              position: "relative",
+              transition: "border-color 0.2s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = C.borderHover)}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = C.border)}
+          >
+            <BellIcon />
+            <div
+              style={{
+                position: "absolute",
+                top: 8,
+                right: 9,
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                background: C.coral,
+                border: `1.5px solid ${C.white}`,
+              }}
+            />
+          </button>
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              background: C.sidebarBg,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              fontFamily: SERIF,
+              fontSize: 14,
+              fontWeight: 600,
+              color: C.sidebarActive,
+              letterSpacing: 1,
+            }}
+          >
+            M
+          </div>
+        </div>
+      </header>
+
+      {/* ─── Scrollable Content ─── */}
+      <div style={{ padding: "36px 44px", maxWidth: 1080 }}>
+        {/* Hero Greeting */}
+        <div style={{ marginBottom: 32 }}>
+          <div
+            style={{
+              fontFamily: SERIF,
+              fontSize: 38,
+              fontWeight: 600,
+              color: C.black,
+              letterSpacing: 1,
+              lineHeight: 1.2,
+              marginBottom: 10,
+            }}
+          >
+            {getGreeting()}, Michael.
+          </div>
+          <div
+            style={{
+              fontFamily: SANS,
+              fontSize: 14,
+              color: C.light,
+              letterSpacing: 0.3,
+              marginBottom: 22,
+            }}
+          >
+            4 active projects &middot; 2 awaiting review &middot; 1 ready for delivery
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              style={{
+                fontFamily: SANS,
+                fontSize: 11.5,
+                fontWeight: 600,
+                letterSpacing: 2,
+                textTransform: "uppercase",
+                padding: "12px 26px",
+                background: C.coral,
+                color: C.white,
+                border: "none",
+                borderRadius: RS,
+                cursor: "pointer",
+                transition: "background 0.2s",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = C.coralHover)}
+              onMouseLeave={(e) => (e.currentTarget.style.background = C.coral)}
+            >
+              + Start New Project
+            </button>
+            <button
+              onClick={() => onNavigate("imagine")}
+              style={{
+                fontFamily: SANS,
+                fontSize: 11.5,
+                fontWeight: 500,
+                letterSpacing: 2,
+                textTransform: "uppercase",
+                padding: "12px 26px",
+                background: C.white,
+                color: C.mid,
+                border: `1px solid ${C.border}`,
+                borderRadius: RS,
+                cursor: "pointer",
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = C.borderHover;
+                e.currentTarget.style.color = C.dark;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = C.border;
+                e.currentTarget.style.color = C.mid;
+              }}
+            >
+              Open Imagine
+            </button>
+          </div>
+        </div>
+
+        {/* AI-Assisted Tools */}
+        <Section label="AI-Assisted Tools" style={{ padding: "28px 28px 32px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            {TOOLS.map((t) => (
+              <ToolCard
+                key={t.id}
+                title={t.title}
+                sub={t.sub}
+                onClick={() => {
+                  if (t.id === "imagine") {
+                    onNavigate("imagine");
+                  } else {
+                    onOpenTool(t);
+                  }
+                }}
+              />
+            ))}
+          </div>
+        </Section>
+
+        {/* Recent Projects */}
+        <Section
+          label="Recent Projects"
+          style={{ padding: "24px 28px 28px" }}
+          rightAction={
+            <span
+              style={{
+                fontFamily: SANS,
+                fontSize: 10.5,
+                color: C.light,
+                letterSpacing: 1.5,
+                textTransform: "uppercase",
+                cursor: "pointer",
+                transition: "color 0.2s",
+                fontWeight: 500,
+              }}
+              onClick={() => onNavigate("projects")}
+              onMouseEnter={(e) => (e.currentTarget.style.color = C.mid)}
+              onMouseLeave={(e) => (e.currentTarget.style.color = C.light)}
+            >
+              View All &rarr;
+            </span>
+          }
+        >
+          {PROJECTS.map((p) => (
+            <ProjectRow key={p.id} project={p} onClick={() => onNavigate("project-detail")} />
+          ))}
+        </Section>
+
+        {/* Overview Stats */}
+        <Section label="Overview" style={{ padding: "24px 28px 28px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+            {STATS.map((stat, i) => (
+              <div
+                key={i}
+                style={{
+                  padding: "22px 18px",
+                  background: C.white,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: RS,
+                  textAlign: "center",
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: SANS,
+                    fontSize: 9.5,
+                    fontWeight: 600,
+                    letterSpacing: 2.5,
+                    textTransform: "uppercase",
+                    color: C.label,
+                    marginBottom: 10,
+                  }}
+                >
+                  {stat.label}
+                </div>
+                <div
+                  style={{
+                    fontFamily: SERIF,
+                    fontSize: 30,
+                    fontWeight: 600,
+                    color: C.black,
+                  }}
+                >
+                  {stat.value}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        {/* Footer */}
+        <div style={{ textAlign: "center", padding: "16px 0 8px" }}>
+          <div style={{ width: 32, height: 1, background: C.border, margin: "0 auto 14px", borderRadius: 1 }} />
+          <div
+            style={{
+              fontFamily: SERIF,
+              fontSize: 13,
+              color: C.light,
+              letterSpacing: 4,
+              textTransform: "uppercase",
+            }}
+          >
+            Every piece. Every order. Organized.
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ═══════════════════════════════════════
 // MAIN DASHBOARD
 // ═══════════════════════════════════════
@@ -689,20 +978,19 @@ export default function ZipJewelerDashboard() {
     setTimeout(() => setLoaded(true), 50);
   }, []);
 
-  // Get greeting based on time of day
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 17) return "Good afternoon";
-    return "Good evening";
+  const handleNavigate = (target) => {
+    setActiveNav(target);
+    setActiveTool(null);
   };
+
+  const sidebarNavKey = activeNav === "project-detail" ? "projects" : activeNav;
 
   const navItems = [
     { key: "dashboard", label: "Dashboard", icon: <DashboardIcon /> },
     { key: "projects", label: "Projects", icon: <ProjectsIcon /> },
     { key: "products", label: "Products", icon: <ProductsIcon /> },
     { key: "orders", label: "Orders", icon: <OrdersIcon /> },
-    { key: "users", label: "Users", icon: <UsersIcon /> },
+    { key: "imagine", label: "Imagine", icon: <ImagineIcon /> },
   ];
 
   return (
@@ -726,6 +1014,7 @@ export default function ZipJewelerDashboard() {
         {/* Logo */}
         <div style={{ padding: "28px 28px 36px" }}>
           <div
+            onClick={() => handleNavigate("dashboard")}
             style={{
               fontFamily: SERIF,
               fontSize: 20,
@@ -734,6 +1023,7 @@ export default function ZipJewelerDashboard() {
               letterSpacing: 6,
               textTransform: "uppercase",
               lineHeight: 1.2,
+              cursor: "pointer",
             }}
           >
             Zip
@@ -748,9 +1038,9 @@ export default function ZipJewelerDashboard() {
             <SideNav
               key={item.key}
               label={item.label}
-              icon={item.key === activeNav ? React.cloneElement(item.icon, { color: C.sidebarActive }) : item.icon}
-              active={activeNav === item.key}
-              onClick={() => setActiveNav(item.key)}
+              icon={sidebarNavKey === item.key ? React.cloneElement(item.icon, { color: C.sidebarActive }) : item.icon}
+              active={sidebarNavKey === item.key}
+              onClick={() => handleNavigate(item.key)}
             />
           ))}
         </nav>
@@ -812,291 +1102,51 @@ export default function ZipJewelerDashboard() {
           transition: "opacity 0.4s ease",
         }}
       >
-        {/* ─── Header Bar ─── */}
-        <header
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "16px 44px",
-            background: C.white,
-            borderBottom: `1px solid ${C.border}`,
-            position: "sticky",
-            top: 0,
-            zIndex: 40,
-          }}
-        >
-          {/* Search */}
-          <div style={{ position: "relative", flex: "0 1 420px" }}>
-            <div
+        {activeNav === "dashboard" && (
+          <DashboardContent onNavigate={handleNavigate} onOpenTool={setActiveTool} />
+        )}
+        {activeNav === "projects" && (
+          <>
+            <header
               style={{
-                position: "absolute",
-                left: 14,
-                top: "50%",
-                transform: "translateY(-50%)",
-                display: "flex",
-                alignItems: "center",
-              }}
-            >
-              <SearchIcon color={C.light} size={15} />
-            </div>
-            <input
-              placeholder="Search projects, tools, orders..."
-              style={{
-                width: "100%",
-                padding: "11px 16px 11px 40px",
-                fontFamily: SANS,
-                fontSize: 13,
-                color: C.dark,
-                background: C.section,
-                border: `1px solid ${C.border}`,
-                borderRadius: R,
-                outline: "none",
-                transition: "border-color 0.2s, background 0.2s",
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = C.borderHover;
-                e.target.style.background = C.white;
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = C.border;
-                e.target.style.background = C.section;
-              }}
-            />
-          </div>
-
-          {/* Right side: Bell + Avatar */}
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            {/* Notifications */}
-            <button
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: R,
-                border: `1px solid ${C.border}`,
+                padding: "24px 44px",
                 background: C.white,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                position: "relative",
-                transition: "border-color 0.2s",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.borderColor = C.borderHover)}
-              onMouseLeave={(e) => (e.currentTarget.style.borderColor = C.border)}
-            >
-              <BellIcon />
-              {/* Notification dot */}
-              <div
-                style={{
-                  position: "absolute",
-                  top: 8,
-                  right: 9,
-                  width: 6,
-                  height: 6,
-                  borderRadius: 3,
-                  background: C.coral,
-                  border: `1.5px solid ${C.white}`,
-                }}
-              />
-            </button>
-
-            {/* User Avatar */}
-            <div
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 18,
-                background: C.sidebarBg,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                fontFamily: SERIF,
-                fontSize: 14,
-                fontWeight: 600,
-                color: C.sidebarActive,
-                letterSpacing: 1,
+                borderBottom: `1px solid ${C.border}`,
+                position: "sticky",
+                top: 0,
+                zIndex: 40,
               }}
             >
-              M
-            </div>
-          </div>
-        </header>
-
-        {/* ─── Scrollable Content ─── */}
-        <div style={{ padding: "36px 44px", maxWidth: 1080 }}>
-          {/* ═══ Hero Greeting ═══ */}
-          <div style={{ marginBottom: 32 }}>
-            <div
-              style={{
-                fontFamily: SERIF,
-                fontSize: 38,
-                fontWeight: 600,
-                color: C.black,
-                letterSpacing: 1,
-                lineHeight: 1.2,
-                marginBottom: 10,
-              }}
-            >
-              {getGreeting()}, Michael.
-            </div>
-            <div
-              style={{
-                fontFamily: SANS,
-                fontSize: 14,
-                color: C.light,
-                letterSpacing: 0.3,
-                marginBottom: 22,
-              }}
-            >
-              4 active projects &middot; 2 awaiting review &middot; 1 ready for delivery
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button
-                style={{
-                  fontFamily: SANS,
-                  fontSize: 11.5,
-                  fontWeight: 600,
-                  letterSpacing: 2,
-                  textTransform: "uppercase",
-                  padding: "12px 26px",
-                  background: C.coral,
-                  color: C.white,
-                  border: "none",
-                  borderRadius: RS,
-                  cursor: "pointer",
-                  transition: "background 0.2s",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = C.coralHover)}
-                onMouseLeave={(e) => (e.currentTarget.style.background = C.coral)}
-              >
-                + Start New Project
-              </button>
-              <button
-                style={{
-                  fontFamily: SANS,
-                  fontSize: 11.5,
-                  fontWeight: 500,
-                  letterSpacing: 2,
-                  textTransform: "uppercase",
-                  padding: "12px 26px",
-                  background: C.white,
-                  color: C.mid,
-                  border: `1px solid ${C.border}`,
-                  borderRadius: RS,
-                  cursor: "pointer",
-                  transition: "all 0.2s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = C.borderHover;
-                  e.currentTarget.style.color = C.dark;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = C.border;
-                  e.currentTarget.style.color = C.mid;
-                }}
-              >
-                Open Imagine
-              </button>
-            </div>
-          </div>
-
-          {/* ═══ AI-Assisted Tools ═══ */}
-          <Section label="AI-Assisted Tools" style={{ padding: "28px 28px 32px" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-              {TOOLS.map((t) => (
-                <ToolCard key={t.id} title={t.title} sub={t.sub} onClick={() => setActiveTool(t)} />
-              ))}
-            </div>
-          </Section>
-
-          {/* ═══ Recent Projects ═══ */}
-          <Section
-            label="Recent Projects"
-            style={{ padding: "24px 28px 28px" }}
-            rightAction={
-              <span
-                style={{
-                  fontFamily: SANS,
-                  fontSize: 10.5,
-                  color: C.light,
-                  letterSpacing: 1.5,
-                  textTransform: "uppercase",
-                  cursor: "pointer",
-                  transition: "color 0.2s",
-                  fontWeight: 500,
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = C.mid)}
-                onMouseLeave={(e) => (e.currentTarget.style.color = C.light)}
-              >
-                View All &rarr;
-              </span>
-            }
-          >
-            {PROJECTS.map((p) => (
-              <ProjectRow key={p.id} project={p} />
-            ))}
-          </Section>
-
-          {/* ═══ Overview Stats ═══ */}
-          <Section label="Overview" style={{ padding: "24px 28px 28px" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
-              {STATS.map((stat, i) => (
-                <div
-                  key={i}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ fontFamily: SERIF, fontSize: 32, fontWeight: 600, color: C.black, letterSpacing: 5, textTransform: "uppercase" }}>Projects</div>
+                <button
                   style={{
-                    padding: "22px 18px",
-                    background: C.white,
-                    border: `1px solid ${C.border}`,
-                    borderRadius: RS,
-                    textAlign: "center",
+                    fontFamily: SANS, fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase",
+                    padding: "10px 24px", background: C.coral, color: C.white, border: "none", borderRadius: RS,
+                    cursor: "pointer", transition: "background 0.2s",
                   }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = C.coralHover)}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = C.coral)}
                 >
-                  <div
-                    style={{
-                      fontFamily: SANS,
-                      fontSize: 9.5,
-                      fontWeight: 600,
-                      letterSpacing: 2.5,
-                      textTransform: "uppercase",
-                      color: C.label,
-                      marginBottom: 10,
-                    }}
-                  >
-                    {stat.label}
-                  </div>
-                  <div
-                    style={{
-                      fontFamily: SERIF,
-                      fontSize: 30,
-                      fontWeight: 600,
-                      color: C.black,
-                    }}
-                  >
-                    {stat.value}
-                  </div>
-                </div>
-              ))}
+                  + New Project
+                </button>
+              </div>
+            </header>
+            <div style={{ padding: "28px 44px 60px", maxWidth: 1080 }}>
+              <Section label="All Projects" style={{ padding: "24px 28px 28px" }}>
+                {PROJECTS.map((p) => (
+                  <ProjectRow key={p.id} project={p} onClick={() => handleNavigate("project-detail")} />
+                ))}
+              </Section>
             </div>
-          </Section>
-
-          {/* ═══ Footer ═══ */}
-          <div style={{ textAlign: "center", padding: "16px 0 8px" }}>
-            <div style={{ width: 32, height: 1, background: C.border, margin: "0 auto 14px", borderRadius: 1 }} />
-            <div
-              style={{
-                fontFamily: SERIF,
-                fontSize: 13,
-                color: C.light,
-                letterSpacing: 4,
-                textTransform: "uppercase",
-              }}
-            >
-              Every piece. Every order. Organized.
-            </div>
-          </div>
-        </div>
+          </>
+        )}
+        {activeNav === "products" && <ProductsView />}
+        {activeNav === "orders" && <OrdersView />}
+        {activeNav === "imagine" && <ImagineView />}
+        {activeNav === "project-detail" && (
+          <ProjectView onBack={() => handleNavigate("projects")} />
+        )}
       </main>
 
       {/* ═══ Tool Modal ═══ */}
