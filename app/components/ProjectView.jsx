@@ -3,7 +3,9 @@ import { C, SERIF, SANS, MONO, R, RS } from "./shared";
 import {
   getProject, updateProject, getProjectFiles, getProjectFilesByCategory,
   uploadFileToProject, getFileBlobURL, FILE_CATEGORIES,
+  saveGeneratedImageToProject,
 } from "../lib/storage";
+import { generateImage } from "../lib/api";
 
 // ─── SHARED COMPONENTS ───
 
@@ -285,7 +287,45 @@ export default function ProjectView({ onBack, projectId }) {
   const [fileUrls, setFileUrls] = useState({}); // blobKey → objectURL
   const uploadRef = useRef(null);
   const [uploadContext, setUploadContext] = useState("reference"); // context for current upload
+  const [genState, setGenState] = useState({ loading: false, error: null, imageUrl: null });
   const toggle = (k) => setCollapse((s) => ({ ...s, [k]: !s[k] }));
+
+  const handleGenerateDesign = async (style) => {
+    if (genState.loading) return;
+    setGenState({ loading: true, error: null, imageUrl: null });
+    try {
+      const parts = [];
+      if (style === "render") {
+        parts.push("Photorealistic studio product photograph, white background, professional jewelry lighting");
+      } else {
+        parts.push("Photorealistic custom jewelry product photo, studio lighting, white background");
+      }
+      const f = project.fields;
+      if (f.type) parts.push(f.type);
+      if (f.name || project.name) parts.push(f.name || project.name);
+      if (f.description) parts.push(f.description);
+      if (f.metal) parts.push(`made of ${f.metal}`);
+      if (f.metalKarat) parts.push(f.metalKarat);
+      if (f.mainGemstone) parts.push(`featuring ${f.mainGemstone}`);
+      if (f.designMotif) parts.push(`${f.designMotif} design motif`);
+      if (f.finish) parts.push(`${f.finish} finish`);
+      const prompt = parts.join(", ");
+
+      const result = await generateImage({ prompt, aspectRatio: "1:1", resolution: "2K" });
+      if (result.images?.length) {
+        const url = result.images[0].url;
+        setGenState({ loading: false, error: null, imageUrl: url });
+        if (projectId) {
+          saveGeneratedImageToProject(projectId, url, style === "render" ? "render" : "imagine-sketch", prompt);
+          setProjectFiles(getProjectFiles(projectId));
+        }
+      } else {
+        setGenState({ loading: false, error: "No images were returned. Please try again.", imageUrl: null });
+      }
+    } catch (err) {
+      setGenState({ loading: false, error: err.message, imageUrl: null });
+    }
+  };
 
   useEffect(() => { setTimeout(() => setLoaded(true), 50); }, []);
 
@@ -495,11 +535,24 @@ export default function ProjectView({ onBack, projectId }) {
         {/* ════════════════════════════════════════ */}
         {activeTab === "design" && (
           <>
-            <Section label="AI-Generated Concepts" count={4} rightAction={<SmallBtn label="+ Generate New" primary onClick={() => void 0} />}>
+            <Section label="AI-Generated Concepts" count={4} rightAction={<SmallBtn label={genState.loading ? "Generating..." : "+ Generate New"} primary onClick={() => handleGenerateDesign("concept")} />}>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                {genState.imageUrl && <ImageSlot label="AI Generated" hasImage src={genState.imageUrl} />}
                 {[1, 2, 3, 4].map((n) => <ImageSlot key={n} label={`Concept ${n}`} />)}
                 <ImageSlot label="Generate" />
               </div>
+              {genState.loading && (
+                <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{
+                    width: 16, height: 16, border: `2px solid ${C.border}`, borderTopColor: C.coral,
+                    borderRadius: "50%", animation: "spin 0.8s linear infinite",
+                  }} />
+                  <span style={{ fontFamily: SANS, fontSize: 12, color: C.mid }}>Generating with Nano Banana... This may take up to 30 seconds</span>
+                </div>
+              )}
+              {genState.error && (
+                <div style={{ marginTop: 12, fontFamily: SANS, fontSize: 12, color: C.coral }}>{genState.error}</div>
+              )}
               <div style={{ marginTop: 16, fontFamily: SANS, fontSize: 12, color: C.light }}>
                 <span style={{ fontFamily: MONO, fontSize: 10, color: C.mid }}>PROMPT:</span> Crown of thorns design, literal depiction, stylized thorn motif, detailed thorns, sharp thorns, 14k yellow gold
               </div>
@@ -513,7 +566,7 @@ export default function ProjectView({ onBack, projectId }) {
               </div>
             </Section>
 
-            <Section label="Photorealistic Renders" count={3} rightAction={<SmallBtn label="+ Render" primary onClick={() => void 0} />}>
+            <Section label="Photorealistic Renders" count={3} rightAction={<SmallBtn label={genState.loading ? "Generating..." : "+ Render"} primary onClick={() => handleGenerateDesign("render")} />}>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                 {["Front View", "Side View", "Detail"].map((v) => <ImageSlot key={v} label={v} />)}
                 <ImageSlot label="Add Render" />
