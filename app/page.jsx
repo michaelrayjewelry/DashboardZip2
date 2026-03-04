@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { C, SERIF, SANS, MONO, R, RS } from "./components/shared";
 import ProductsView from "./components/ProductsView";
 import OrdersView from "./components/OrdersView";
@@ -8,7 +8,7 @@ import ImagineView from "./components/ImagineView";
 import ProjectView from "./components/ProjectView";
 import NewProjectModal from "./components/NewProjectModal";
 import { generateImage } from "./lib/api";
-import { getProjects } from "./lib/storage";
+import { getProjects, createProject, saveGeneratedImageToProject } from "./lib/storage";
 
 // ─── Helpers ───
 function timeAgo(dateStr) {
@@ -345,12 +345,36 @@ function ModalField({ label, wide, textarea }) {
   );
 }
 
-function ImageDropZone({ dragOver, setDragOver, large }) {
+function ImageDropZone({ dragOver, setDragOver, large, onFile, previewUrl, onClear }) {
+  const fileRef = useRef(null);
+
+  const handleFiles = (files) => {
+    const file = files?.[0];
+    if (!file || !file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => onFile?.(reader.result, file);
+    reader.readAsDataURL(file);
+  };
+
+  if (previewUrl) {
+    return (
+      <div style={{ position: "relative", width: large ? "100%" : 180, borderRadius: RS, overflow: "hidden" }}>
+        <img src={previewUrl} alt="Uploaded reference" style={{ width: "100%", maxHeight: 280, objectFit: "contain", display: "block", background: C.border, borderRadius: RS }} />
+        <button onClick={onClear} style={{
+          position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: "50%",
+          background: "rgba(30,30,28,0.7)", color: C.white, border: "none", cursor: "pointer",
+          fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)",
+        }}>✕</button>
+      </div>
+    );
+  }
+
   return (
     <div
+      onClick={() => fileRef.current?.click()}
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
-      onDrop={(e) => { e.preventDefault(); setDragOver(false); }}
+      onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
       style={{
         width: large ? "100%" : 180, height: large ? 220 : 180, borderRadius: RS,
         background: dragOver ? "rgba(90,138,74,0.06)" : C.border,
@@ -359,6 +383,7 @@ function ImageDropZone({ dragOver, setDragOver, large }) {
         cursor: "pointer", transition: "all 0.2s",
       }}
     >
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }} />
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={dragOver ? C.green : C.light} strokeWidth="1.2" style={{ marginBottom: 8 }}>
         <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
       </svg>
@@ -370,15 +395,21 @@ function ImageDropZone({ dragOver, setDragOver, large }) {
 }
 
 // ─── Tool Modal ───
-function ToolModal({ tool, onClose }) {
+function ToolModal({ tool, onClose, onProjectCreated }) {
   const [dragOver, setDragOver] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState("");
   const [aspectRatio, setAspectRatio] = useState("1:1");
   const [resolution, setResolution] = useState("1080p");
+  const [cameraAngle, setCameraAngle] = useState("front");
+  const [sceneStyle, setSceneStyle] = useState("studio");
+  const [lighting, setLighting] = useState("studio");
+  const [background, setBackground] = useState("white");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImages, setGeneratedImages] = useState([]);
   const [error, setError] = useState(null);
+  const [uploadedImage, setUploadedImage] = useState(null);
+  const [uploadedFile, setUploadedFile] = useState(null);
 
   if (!tool) return null;
 
@@ -389,33 +420,91 @@ function ToolModal({ tool, onClose }) {
   const isFileHub = tool.id === "file-hub";
   const actionLabel = tool.actionLabel || "Generate with AI";
 
-  // Build a prompt that incorporates the tool context
+  const CAMERA_ANGLES = [
+    { value: "front", label: "Front" },
+    { value: "three-quarter", label: "3/4 View" },
+    { value: "side", label: "Side Profile" },
+    { value: "top-down", label: "Top Down" },
+    { value: "close-up", label: "Close-Up Detail" },
+    { value: "wrist-shot", label: "Wrist / On-Body" },
+  ];
+
+  const SCENE_STYLES = [
+    { value: "studio", label: "Studio Product" },
+    { value: "lifestyle", label: "Lifestyle" },
+    { value: "editorial", label: "Editorial" },
+    { value: "catalog", label: "Catalog / E-Commerce" },
+    { value: "dramatic", label: "Dramatic / Moody" },
+  ];
+
+  const LIGHTING_OPTIONS = [
+    { value: "studio", label: "Studio Soft" },
+    { value: "natural", label: "Natural Light" },
+    { value: "dramatic", label: "Dramatic" },
+    { value: "golden-hour", label: "Golden Hour" },
+    { value: "rim", label: "Rim / Backlit" },
+  ];
+
+  const BACKGROUND_OPTIONS = [
+    { value: "white", label: "White Seamless" },
+    { value: "gradient", label: "Soft Gradient" },
+    { value: "marble", label: "Marble Surface" },
+    { value: "velvet", label: "Velvet / Fabric" },
+    { value: "natural", label: "Natural / Organic" },
+    { value: "transparent", label: "Transparent" },
+  ];
+
+  // Build a prompt that incorporates the tool context + all settings + reference image context
   const buildPrompt = () => {
     const toolContext = {
-      "sketch-to-jewelry": "Photorealistic custom jewelry product photo, studio lighting, white background",
+      "sketch-to-jewelry": "Photorealistic custom jewelry product photo",
       "technical-to-image": "Convert technical jewelry drawing into a photorealistic product image, detailed metalwork",
       "image-to-marketing": "Luxury jewelry marketing photograph, editorial style, elegant composition",
     };
     const base = toolContext[tool.id] || "";
-    const parts = [base, prompt, style].filter(Boolean);
+    const anglePart = cameraAngle !== "front" ? `${CAMERA_ANGLES.find(a => a.value === cameraAngle)?.label || cameraAngle} angle` : "front view";
+    const scenePart = `${SCENE_STYLES.find(s => s.value === sceneStyle)?.label || sceneStyle} style`;
+    const lightPart = `${LIGHTING_OPTIONS.find(l => l.value === lighting)?.label || lighting} lighting`;
+    const bgPart = `${BACKGROUND_OPTIONS.find(b => b.value === background)?.label || background} background`;
+    const settingsParts = [anglePart, scenePart, lightPart, bgPart].join(", ");
+    const refContext = uploadedImage ? "Based on the uploaded reference sketch/image, " : "";
+    const parts = [refContext + base, prompt, style, settingsParts].filter(Boolean);
     return parts.join(". ");
   };
 
+  // Create a project and save generated images to it
+  const createProjectFromGeneration = (images, promptUsed) => {
+    const projectName = prompt.trim().length > 40 ? prompt.trim().slice(0, 40) + "…" : prompt.trim() || "Sketch to Jewelry";
+    const project = createProject({
+      name: projectName,
+      type: "sketch-to-jewelry",
+      fields: { style, cameraAngle, sceneStyle, lighting, background, aspectRatio, resolution, promptUsed },
+    });
+    for (const img of images) {
+      saveGeneratedImageToProject(project.id, img.url, "sketch-to-jewelry", promptUsed);
+    }
+    return project;
+  };
+
   const handleGenerate = async () => {
-    if (!prompt.trim()) return;
+    if (!prompt.trim() && !uploadedImage) return;
     setIsGenerating(true);
     setError(null);
     setGeneratedImages([]);
 
     try {
+      const fullPrompt = buildPrompt();
       const result = await generateImage({
-        prompt: buildPrompt(),
+        prompt: fullPrompt,
         aspectRatio,
         resolution,
       });
 
       if (result.images && result.images.length > 0) {
         setGeneratedImages(result.images);
+        // Auto-create project folder with generated image
+        const project = createProjectFromGeneration(result.images, fullPrompt);
+        onProjectCreated?.(project.id);
       } else {
         setError("No images were returned. Please try again.");
       }
@@ -424,6 +513,14 @@ function ToolModal({ tool, onClose }) {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleSaveDraft = () => {
+    if (!prompt.trim() && !uploadedImage) { onClose(); return; }
+    const fullPrompt = buildPrompt();
+    const project = createProjectFromGeneration(generatedImages, fullPrompt);
+    onProjectCreated?.(project.id);
+    onClose();
   };
 
   return (
@@ -496,8 +593,18 @@ function ToolModal({ tool, onClose }) {
           {/* ── Image-input AI tools (Sketch, Technical, Marketing) ── */}
           {isImageTool && (
             <>
-              <Section label="Upload Reference Image (Optional)">
-                <ImageDropZone dragOver={dragOver} setDragOver={setDragOver} large />
+              <Section label="Upload Reference Image">
+                <ImageDropZone
+                  dragOver={dragOver} setDragOver={setDragOver} large
+                  previewUrl={uploadedImage}
+                  onFile={(dataUrl, file) => { setUploadedImage(dataUrl); setUploadedFile(file); }}
+                  onClear={() => { setUploadedImage(null); setUploadedFile(null); }}
+                />
+                {!uploadedImage && (
+                  <div style={{ fontFamily: SANS, fontSize: 11, color: C.light, marginTop: 8 }}>
+                    Upload a sketch or reference image to guide the AI generation
+                  </div>
+                )}
               </Section>
               <Section label="Generation Settings">
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "20px 32px" }}>
@@ -523,6 +630,46 @@ function ToolModal({ tool, onClose }) {
                       onFocus={(e) => (e.target.style.borderBottomColor = C.mid)}
                       onBlur={(e) => (e.target.style.borderBottomColor = C.borderInput)}
                     />
+                  </div>
+                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
+                    <div style={labelStyle}>Camera Angle</div>
+                    <select
+                      value={cameraAngle}
+                      onChange={(e) => setCameraAngle(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}
+                    >
+                      {CAMERA_ANGLES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
+                    <div style={labelStyle}>Scene Style</div>
+                    <select
+                      value={sceneStyle}
+                      onChange={(e) => setSceneStyle(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}
+                    >
+                      {SCENE_STYLES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
+                    <div style={labelStyle}>Lighting</div>
+                    <select
+                      value={lighting}
+                      onChange={(e) => setLighting(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}
+                    >
+                      {LIGHTING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
+                    <div style={labelStyle}>Background</div>
+                    <select
+                      value={background}
+                      onChange={(e) => setBackground(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}
+                    >
+                      {BACKGROUND_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
                   </div>
                   <div style={{ flex: "1 1 calc(25% - 16px)", minWidth: 120 }}>
                     <div style={labelStyle}>Aspect Ratio</div>
@@ -685,28 +832,30 @@ function ToolModal({ tool, onClose }) {
 
           {/* Actions */}
           <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+            {(() => {
+              const canGenerate = isImageTool && (prompt.trim() || uploadedImage);
+              const isDisabled = isImageTool ? (isGenerating || !canGenerate) : false;
+              return (
+                <button
+                  onClick={isImageTool ? handleGenerate : undefined}
+                  disabled={isDisabled}
+                  style={{
+                    flex: 1, fontFamily: SANS, fontSize: 12, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase",
+                    padding: "14px 28px",
+                    background: isDisabled ? C.border : C.coral,
+                    color: C.white, border: "none", borderRadius: RS,
+                    cursor: isDisabled ? "default" : "pointer",
+                    transition: "background 0.2s",
+                  }}
+                  onMouseEnter={(e) => { if (!isDisabled) e.currentTarget.style.background = C.coralHover; }}
+                  onMouseLeave={(e) => { if (!isDisabled) e.currentTarget.style.background = C.coral; }}
+                >
+                  {isGenerating ? "Generating..." : actionLabel}
+                </button>
+              );
+            })()}
             <button
-              onClick={isImageTool ? handleGenerate : undefined}
-              disabled={isImageTool ? (isGenerating || !prompt.trim()) : false}
-              style={{
-                flex: 1, fontFamily: SANS, fontSize: 12, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase",
-                padding: "14px 28px",
-                background: (isImageTool && (isGenerating || !prompt.trim())) ? C.border : C.coral,
-                color: C.white, border: "none", borderRadius: RS,
-                cursor: (isImageTool && (isGenerating || !prompt.trim())) ? "default" : "pointer",
-                transition: "background 0.2s",
-              }}
-              onMouseEnter={(e) => {
-                if (!(isImageTool && (isGenerating || !prompt.trim()))) e.currentTarget.style.background = C.coralHover;
-              }}
-              onMouseLeave={(e) => {
-                if (!(isImageTool && (isGenerating || !prompt.trim()))) e.currentTarget.style.background = C.coral;
-              }}
-            >
-              {isGenerating ? "Generating..." : actionLabel}
-            </button>
-            <button
-              onClick={isFileHub || generatedImages.length > 0 ? onClose : undefined}
+              onClick={isImageTool && !isFileHub && generatedImages.length === 0 ? handleSaveDraft : onClose}
               style={{
                 fontFamily: SANS, fontSize: 12, fontWeight: 500, letterSpacing: 1.5, textTransform: "uppercase",
                 padding: "14px 24px", background: C.white, color: C.mid, border: `1px solid ${C.border}`,
@@ -1303,7 +1452,7 @@ export default function ZipJewelerDashboard() {
       {activeTool?.id === "new-project" ? (
         <NewProjectModal onClose={() => { setActiveTool(null); refreshProjects(); }} onProjectCreated={(id) => { refreshProjects(); handleNavigate("project-detail", id); }} />
       ) : (
-        <ToolModal tool={activeTool} onClose={() => setActiveTool(null)} />
+        <ToolModal tool={activeTool} onClose={() => { setActiveTool(null); refreshProjects(); }} onProjectCreated={(id) => { refreshProjects(); }} />
       )}
 
       {/* ═══ New Project Modal (from Projects page button) ═══ */}
