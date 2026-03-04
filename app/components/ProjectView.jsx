@@ -196,22 +196,23 @@ function Section({ label, children, style = {}, rightAction, collapsed, onToggle
   );
 }
 
-function Field({ label, value = "", wide, textarea, readOnly, mono }) {
+function Field({ label, value = "", wide, textarea, readOnly, mono, onChange }) {
+  const handleBlur = (e) => {
+    const newVal = e.target.value.trim();
+    if (onChange && newVal !== (value || "")) onChange(newVal);
+  };
+  const inputStyle = {
+    width: "100%", padding: "8px 2px", fontFamily: mono ? MONO : SANS, fontSize: 13, color: C.dark,
+    background: "transparent", border: "none", borderBottom: `1px solid ${C.borderInput}`,
+    outline: "none", borderRadius: 0,
+  };
   return (
     <div style={{ flex: wide ? "1 1 100%" : "1 1 calc(50% - 16px)", minWidth: wide ? "100%" : 180 }}>
       <div style={{ fontFamily: SANS, fontSize: 9.5, fontWeight: 600, letterSpacing: 2.5, textTransform: "uppercase", color: C.label, marginBottom: 4 }}>{label}</div>
       {textarea ? (
-        <textarea defaultValue={value} readOnly={readOnly} rows={3} style={{
-          width: "100%", padding: "8px 2px", fontFamily: mono ? MONO : SANS, fontSize: 13, color: C.dark,
-          background: "transparent", border: "none", borderBottom: `1px solid ${C.borderInput}`,
-          outline: "none", resize: "vertical", lineHeight: 1.6, borderRadius: 0,
-        }} />
+        <textarea defaultValue={value} readOnly={readOnly} rows={3} onBlur={handleBlur} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }} />
       ) : (
-        <input defaultValue={value} readOnly={readOnly} style={{
-          width: "100%", padding: "8px 2px", fontFamily: mono ? MONO : SANS, fontSize: 13, color: C.dark,
-          background: "transparent", border: "none", borderBottom: `1px solid ${C.borderInput}`,
-          outline: "none", borderRadius: 0,
-        }} />
+        <input defaultValue={value} readOnly={readOnly} onBlur={handleBlur} style={inputStyle} />
       )}
     </div>
   );
@@ -391,10 +392,10 @@ function TabBar({ tabs, active, onSelect }) {
 }
 
 // ─── IMAGE SLOT ───
-function ImageSlot({ label, hasImage, src }) {
+function ImageSlot({ label, hasImage, src, onClick }) {
   const [h, setH] = useState(false);
   return (
-    <div onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{
+    <div onClick={onClick || undefined} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{
       width: 160, height: 160, borderRadius: RS, overflow: "hidden",
       background: hasImage ? `url(${src}) center/cover` : (h ? C.white : C.border),
       border: `1px solid ${h ? C.borderHover : C.border}`,
@@ -448,6 +449,16 @@ export default function ProjectView({ onBack, projectId }) {
   const [chatStarted, setChatStarted] = useState(false);
   const chatEndRef = useRef(null);
   const chatInputRef = useRef(null);
+  const [revision, setRevision] = useState(0);
+  const [previewImage, setPreviewImage] = useState(null);
+
+  const saveField = useCallback((fieldKey, value) => {
+    if (!projectId) return;
+    const updates = { fields: { [fieldKey]: value } };
+    if (fieldKey === "name") updates.name = value;
+    updateProject(projectId, updates);
+    setRevision((r) => r + 1);
+  }, [projectId]);
 
   const handleGenerateDesign = async (style) => {
     if (genState.loading) return;
@@ -824,13 +835,13 @@ export default function ProjectView({ onBack, projectId }) {
                 <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                   {(filesByCategory.render || []).map((file) => {
                     const url = getFileUrl(file);
-                    return <ImageSlot key={file.id} label={file.name} hasImage={!!url} src={url} />;
+                    return <ImageSlot key={file.id} label={file.name} hasImage={!!url} src={url} onClick={() => url && setPreviewImage({ src: url, label: file.name })} />;
                   })}
                   {(filesByCategory.reference || []).map((file) => {
                     const url = getFileUrl(file);
-                    return <ImageSlot key={file.id} label={file.name} hasImage={!!url} src={url} />;
+                    return <ImageSlot key={file.id} label={file.name} hasImage={!!url} src={url} onClick={() => url && setPreviewImage({ src: url, label: file.name })} />;
                   })}
-                  <ImageSlot label="Add Image" hasImage={false} />
+                  <ImageSlot label="Add Image" hasImage={false} onClick={() => triggerUpload("reference")} />
                 </div>
               </Section>
 
@@ -853,10 +864,10 @@ export default function ProjectView({ onBack, projectId }) {
             <Section label="AI-Generated Concepts" count={storedGeneratedImages.length} rightAction={<SmallBtn label={genState.loading ? "Generating..." : "+ Generate New"} primary onClick={() => handleGenerateDesign("concept")} />}>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                 {genState.imageUrl && !storedGeneratedImages.find(i => i.url === genState.imageUrl) && (
-                  <ImageSlot label="New" hasImage src={genState.imageUrl} />
+                  <ImageSlot label="New" hasImage src={genState.imageUrl} onClick={() => setPreviewImage({ src: genState.imageUrl, label: "New Concept" })} />
                 )}
                 {storedGeneratedImages.map((img, i) => (
-                  <ImageSlot key={img.url || i} label={`Concept ${i + 1}`} hasImage src={img.url} />
+                  <ImageSlot key={img.url || i} label={`Concept ${i + 1}`} hasImage src={img.url} onClick={() => setPreviewImage({ src: img.url, label: `Concept ${i + 1}` })} />
                 ))}
                 <ImageSlot label="Generate" />
               </div>
@@ -883,7 +894,7 @@ export default function ProjectView({ onBack, projectId }) {
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                 {(filesByCategory.sketch || []).map((f) => {
                   const url = getFileUrl(f);
-                  return <ImageSlot key={f.id} label={f.name} hasImage={!!url} src={url} />;
+                  return <ImageSlot key={f.id} label={f.name} hasImage={!!url} src={url} onClick={() => url && setPreviewImage({ src: url, label: f.name })} />;
                 })}
                 <ImageSlot label="Add Sketch" />
               </div>
@@ -893,7 +904,7 @@ export default function ProjectView({ onBack, projectId }) {
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                 {(filesByCategory.render || []).map((f) => {
                   const url = getFileUrl(f);
-                  return <ImageSlot key={f.id} label={f.name} hasImage={!!url} src={url} />;
+                  return <ImageSlot key={f.id} label={f.name} hasImage={!!url} src={url} onClick={() => url && setPreviewImage({ src: url, label: f.name })} />;
                 })}
                 <ImageSlot label="Add Render" />
               </div>
@@ -914,53 +925,53 @@ export default function ProjectView({ onBack, projectId }) {
           <>
             <Section label="General">
               <div style={{ display: "flex", flexWrap: "wrap", gap: "18px 32px" }}>
-                <Field label="Jewelry Type" value={project.fields.type || "Ring"} />
-                <Field label="Name" value={project.fields.name || project.name} />
-                <Field label="Description" value={project.fields.description || "Crown of thorns design, literal depiction, stylized thorn motif, detailed thorns, sharp thorns, crown of thorns, 14k yellow gold"} wide textarea />
+                <Field label="Jewelry Type" value={project.fields.type || ""} onChange={(v) => saveField("type", v)} />
+                <Field label="Name" value={project.fields.name || project.name} onChange={(v) => saveField("name", v)} />
+                <Field label="Description" value={project.fields.description || ""} wide textarea onChange={(v) => saveField("description", v)} />
               </div>
             </Section>
 
             <Section label="Dimensions & Sizing">
               <div style={{ display: "flex", flexWrap: "wrap", gap: "18px 32px" }}>
-                <Field label="Ring Size" value="10" />
-                <Field label="Band Width" value="6mm" />
-                <Field label="Band Thickness" value="2.2mm" />
-                <Field label="Total Height" value="8mm" />
-                <Field label="Gender" value="" />
-                <Field label="Weight (est.)" value="8.2g" />
+                <Field label="Ring Size" value={project.fields.size || ""} onChange={(v) => saveField("size", v)} />
+                <Field label="Band Width" value={project.fields.bandWidth || ""} onChange={(v) => saveField("bandWidth", v)} />
+                <Field label="Band Thickness" value={project.fields.bandThickness || ""} onChange={(v) => saveField("bandThickness", v)} />
+                <Field label="Total Height" value={project.fields.totalHeight || ""} onChange={(v) => saveField("totalHeight", v)} />
+                <Field label="Gender" value={project.fields.gender || ""} onChange={(v) => saveField("gender", v)} />
+                <Field label="Weight (est.)" value={project.fields.weight || ""} onChange={(v) => saveField("weight", v)} />
               </div>
             </Section>
 
             <Section label="Metal">
               <div style={{ display: "flex", flexWrap: "wrap", gap: "18px 32px" }}>
-                <Field label="Metal" value={project.fields.metal || "Yellow Gold"} />
-                <Field label="Metal Karat" value={project.fields.metalKarat || "14k"} />
-                <Field label="Finish" value={project.fields.finish || "High Polish"} />
-                <Field label="Plating" value="None" />
+                <Field label="Metal" value={project.fields.metal || ""} onChange={(v) => saveField("metal", v)} />
+                <Field label="Metal Karat" value={project.fields.metalKarat || ""} onChange={(v) => saveField("metalKarat", v)} />
+                <Field label="Finish" value={project.fields.finish || ""} onChange={(v) => saveField("finish", v)} />
+                <Field label="Plating" value={project.fields.plating || ""} onChange={(v) => saveField("plating", v)} />
               </div>
             </Section>
 
             <Section label="Gemstones" collapsed={collapseState.gems} onToggle={() => toggle("gems")} count={0}>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "18px 32px" }}>
-                <Field label="Main Gemstone" value="" />
-                <Field label="Gemstone Shape" value="" />
-                <Field label="Gemstone Size" value="" />
-                <Field label="Gemstone Quality" value="" />
-                <Field label="Setting Type" value="" />
-                <Field label="Number of Stones" value="" />
-                <Field label="Side Stones" value="" />
-                <Field label="Total Carat Weight" value="" />
+                <Field label="Main Gemstone" value={project.fields.mainGemstone || ""} onChange={(v) => saveField("mainGemstone", v)} />
+                <Field label="Gemstone Shape" value={project.fields.gemstoneShape || ""} onChange={(v) => saveField("gemstoneShape", v)} />
+                <Field label="Gemstone Size" value={project.fields.gemstoneSize || ""} onChange={(v) => saveField("gemstoneSize", v)} />
+                <Field label="Gemstone Quality" value={project.fields.gemstoneQuality || ""} onChange={(v) => saveField("gemstoneQuality", v)} />
+                <Field label="Setting Type" value={project.fields.settingType || ""} onChange={(v) => saveField("settingType", v)} />
+                <Field label="Number of Stones" value={project.fields.numberOfStones || ""} onChange={(v) => saveField("numberOfStones", v)} />
+                <Field label="Side Stones" value={project.fields.sideStones || ""} onChange={(v) => saveField("sideStones", v)} />
+                <Field label="Total Carat Weight" value={project.fields.totalCaratWeight || ""} onChange={(v) => saveField("totalCaratWeight", v)} />
               </div>
             </Section>
 
             <Section label="Style Details" collapsed={collapseState.style} onToggle={() => toggle("style")}>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "18px 32px" }}>
-                <Field label="Band Style" value="Sculptural" />
-                <Field label="Ring Type" value="Statement" />
-                <Field label="Design Motif" value="Crown of Thorns" />
-                <Field label="Texture" value="Organic / Thorn Detail" />
-                <Field label="Engraving" value="" />
-                <Field label="Special Instructions" value="" wide textarea />
+                <Field label="Band Style" value={project.fields.bandStyle || ""} onChange={(v) => saveField("bandStyle", v)} />
+                <Field label="Ring Type" value={project.fields.ringType || ""} onChange={(v) => saveField("ringType", v)} />
+                <Field label="Design Motif" value={project.fields.designMotif || ""} onChange={(v) => saveField("designMotif", v)} />
+                <Field label="Texture" value={project.fields.texture || ""} onChange={(v) => saveField("texture", v)} />
+                <Field label="Engraving" value={project.fields.engraving || ""} onChange={(v) => saveField("engraving", v)} />
+                <Field label="Special Instructions" value={project.fields.specialNotes || ""} wide textarea onChange={(v) => saveField("specialNotes", v)} />
               </div>
             </Section>
           </>
@@ -1282,6 +1293,30 @@ export default function ProjectView({ onBack, projectId }) {
       )}
 
       </div>{/* end content + sidebar row */}
+
+      {/* ─── Image Preview Modal ─── */}
+      {previewImage && (
+        <div onClick={() => setPreviewImage(null)} style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(0,0,0,0.82)", display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", cursor: "zoom-out",
+        }}>
+          <button onClick={() => setPreviewImage(null)} style={{
+            position: "absolute", top: 18, right: 24, background: "none", border: "none",
+            color: "#fff", fontSize: 28, cursor: "pointer", lineHeight: 1,
+          }}>{"\u2715"}</button>
+          <img
+            src={previewImage.src} alt={previewImage.label || "Preview"}
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: "90vw", maxHeight: "82vh", objectFit: "contain", borderRadius: R, cursor: "default" }}
+          />
+          {previewImage.label && (
+            <div style={{ marginTop: 12, fontFamily: SANS, fontSize: 12, color: "rgba(255,255,255,0.7)", letterSpacing: 1 }}>
+              {previewImage.label}
+            </div>
+          )}
+        </div>
+      )}
     </>
   );
 }
