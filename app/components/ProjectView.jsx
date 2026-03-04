@@ -495,6 +495,9 @@ export default function ProjectView({ onBack, projectId }) {
   const [previewImage, setPreviewImage] = useState(null);
   const [coverPickerOpen, setCoverPickerOpen] = useState(false);
 
+  // Load project data from storage (hoisted before BOM state initializers)
+  const storedProject = projectId ? getProject(projectId) : null;
+
   // ─── BOM & Pricing state ───
   const [bom, setBom] = useState(() => {
     const stored = storedProject?.fields?.bom;
@@ -622,9 +625,6 @@ export default function ProjectView({ onBack, projectId }) {
   };
 
   useEffect(() => { setTimeout(() => setLoaded(true), 50); }, []);
-
-  // Load project data from storage
-  const storedProject = projectId ? getProject(projectId) : null;
 
   // Load files from storage
   useEffect(() => {
