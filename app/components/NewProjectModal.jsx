@@ -306,7 +306,7 @@ function ToolSuggestionCard({ toolKey, reason, onActivate }) {
 // ═══════════════════════════════════════
 // MAIN NEW PROJECT MODAL
 // ═══════════════════════════════════════
-export default function NewProjectModal({ onClose, onProjectCreated }) {
+export default function NewProjectModal({ onClose, onProjectCreated, initialMode }) {
   // ─── Form state ───
   const [jewelryType, setJewelryType] = useState(null);
   const [fields, setFields] = useState({});
@@ -352,7 +352,7 @@ export default function NewProjectModal({ onClose, onProjectCreated }) {
   const [isLoading, setIsLoading] = useState(false);
   const [conversationHistory, setConversationHistory] = useState([]);
   const [readiness, setReadiness] = useState(0);
-  const [chatStarted, setChatStarted] = useState(false);
+  const [chatStarted, setChatStarted] = useState(initialMode === "assisted");
 
   const chatEndRef = useRef(null);
   const chatInputRef = useRef(null);
@@ -361,6 +361,16 @@ export default function NewProjectModal({ onClose, onProjectCreated }) {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
+
+  // AI-assisted mode: send a welcome message on mount
+  useEffect(() => {
+    if (initialMode === "assisted" && messages.length === 0) {
+      setMessages([{
+        role: "assistant",
+        content: "Welcome! I'm your jewelry design assistant. Describe the piece you're envisioning — the style, metal, stones, occasion — and I'll help shape your project specs and generate concepts. What are you looking to create?",
+      }]);
+    }
+  }, [initialMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Field helpers ───
   const updateField = (key, value) => {

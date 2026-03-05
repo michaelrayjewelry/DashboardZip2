@@ -8,6 +8,7 @@ import OrdersView from "./components/OrdersView";
 import ImagineView from "./components/ImagineView";
 import ProjectView from "./components/ProjectView";
 import NewProjectModal from "./components/NewProjectModal";
+import NewProjectGateway from "./components/NewProjectGateway";
 import { generateImage, chatWithClaude } from "./lib/api";
 import { getProjects, createProject, saveGeneratedImageToProject } from "./lib/storage";
 
@@ -1609,6 +1610,8 @@ export default function ZipJewelerDashboard() {
   const [storedProjects, setStoredProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [showGateway, setShowGateway] = useState(false);
+  const [showAIAssistedModal, setShowAIAssistedModal] = useState(false);
 
   // Load projects from storage on mount and when returning to dashboard/projects
   const refreshProjects = useCallback(() => {
@@ -1751,7 +1754,7 @@ export default function ZipJewelerDashboard() {
         {activeNav === "projects" && (
           <ProjectsView
             storedProjects={storedProjects}
-            onNewProject={() => setShowNewProjectModal(true)}
+            onNewProject={() => setShowGateway(true)}
             onOpenProject={(id) => handleNavigate("project-detail", id)}
           />
         )}
@@ -1765,12 +1768,32 @@ export default function ZipJewelerDashboard() {
 
       {/* ═══ Tool Modal ═══ */}
       {activeTool?.id === "new-project" ? (
-        <NewProjectModal onClose={() => { setActiveTool(null); refreshProjects(); }} onProjectCreated={(id) => { refreshProjects(); handleNavigate("project-detail", id); }} />
+        <NewProjectGateway
+          onClose={() => setActiveTool(null)}
+          onBlankCreated={(id) => { setActiveTool(null); refreshProjects(); handleNavigate("project-detail", id); }}
+          onQuickCreated={(id) => { setActiveTool(null); refreshProjects(); handleNavigate("project-detail", id); }}
+          onAIAssisted={() => { setActiveTool(null); setShowAIAssistedModal(true); }}
+        />
       ) : (
         <ToolModal tool={activeTool} onClose={() => { setActiveTool(null); refreshProjects(); }} onProjectCreated={(id) => { refreshProjects(); }} />
       )}
 
-      {/* ═══ New Project Modal (from Projects page button) ═══ */}
+      {/* ═══ New Project Gateway (from Projects page button) ═══ */}
+      {showGateway && (
+        <NewProjectGateway
+          onClose={() => setShowGateway(false)}
+          onBlankCreated={(id) => { setShowGateway(false); refreshProjects(); handleNavigate("project-detail", id); }}
+          onQuickCreated={(id) => { setShowGateway(false); refreshProjects(); handleNavigate("project-detail", id); }}
+          onAIAssisted={() => { setShowGateway(false); setShowAIAssistedModal(true); }}
+        />
+      )}
+
+      {/* ═══ AI-Assisted New Project Modal ═══ */}
+      {showAIAssistedModal && (
+        <NewProjectModal initialMode="assisted" onClose={() => { setShowAIAssistedModal(false); refreshProjects(); }} onProjectCreated={(id) => { setShowAIAssistedModal(false); refreshProjects(); handleNavigate("project-detail", id); }} />
+      )}
+
+      {/* ═══ Direct New Project Modal (for other flows) ═══ */}
       {showNewProjectModal && (
         <NewProjectModal onClose={() => { setShowNewProjectModal(false); refreshProjects(); }} onProjectCreated={(id) => { setShowNewProjectModal(false); refreshProjects(); handleNavigate("project-detail", id); }} />
       )}
