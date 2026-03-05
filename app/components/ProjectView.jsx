@@ -257,8 +257,10 @@ const dl3dStyle = {
   borderRadius: RS, textDecoration: "none", cursor: "pointer",
 };
 
-function FileCard({ name, type, size, date, status }) {
+function FileCard({ name, type, size, date, status, url }) {
   const [h, setH] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const isGlb = name && /\.(glb|gltf)$/i.test(name);
   const typeIcons = {
     cad: { color: C.blue, label: "CAD" }, image: { color: C.green, label: "IMG" },
     pdf: { color: C.coral, label: "PDF" }, model: { color: C.purple, label: "3D" },
@@ -266,22 +268,49 @@ function FileCard({ name, type, size, date, status }) {
   };
   const t = typeIcons[type] || { color: C.mid, label: "FILE" };
   return (
-    <div onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{
-      display: "flex", alignItems: "center", gap: 14, padding: "12px 16px",
-      background: h ? C.white : "transparent", borderRadius: RS,
-      border: `1px solid ${h ? C.borderHover : "transparent"}`, cursor: "pointer", transition: "all 0.2s",
-    }}>
-      <div style={{
-        width: 36, height: 36, borderRadius: RS, display: "flex", alignItems: "center", justifyContent: "center",
-        background: `${t.color}0C`, border: `1px solid ${t.color}20`,
+    <div>
+      <div onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} onClick={() => { if (isGlb && url) setViewerOpen((v) => !v); }} style={{
+        display: "flex", alignItems: "center", gap: 14, padding: "12px 16px",
+        background: h ? C.white : "transparent", borderRadius: RS,
+        border: `1px solid ${h ? C.borderHover : "transparent"}`, cursor: "pointer", transition: "all 0.2s",
       }}>
-        <span style={{ fontFamily: MONO, fontSize: 9, fontWeight: 600, color: t.color, letterSpacing: 1 }}>{t.label}</span>
+        <div style={{
+          width: 36, height: 36, borderRadius: RS, display: "flex", alignItems: "center", justifyContent: "center",
+          background: `${t.color}0C`, border: `1px solid ${t.color}20`,
+        }}>
+          <span style={{ fontFamily: MONO, fontSize: 9, fontWeight: 600, color: t.color, letterSpacing: 1 }}>{t.label}</span>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: SANS, fontSize: 12.5, fontWeight: 500, color: C.dark, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+          <div style={{ fontFamily: MONO, fontSize: 10, color: C.light, marginTop: 2 }}>
+            {size} · {date}
+            {isGlb && url && <span style={{ color: C.purple, marginLeft: 8 }}>{viewerOpen ? "▾ Hide 3D" : "▸ View 3D"}</span>}
+          </div>
+        </div>
+        {status && <Pill label={status} color={status === "Current" ? C.green : C.amber} bg={status === "Current" ? C.greenBg : C.amberBg} border={status === "Current" ? C.greenBorder : C.amberBorder} />}
+        {isGlb && url && (
+          <a href={url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{
+            fontFamily: SANS, fontSize: 9, fontWeight: 600, letterSpacing: 1.5,
+            textTransform: "uppercase", padding: "4px 10px",
+            color: C.mid, border: `1px solid ${C.border}`, borderRadius: RS,
+            textDecoration: "none", background: C.white,
+          }}>
+            ⬇
+          </a>
+        )}
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: SANS, fontSize: 12.5, fontWeight: 500, color: C.dark, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
-        <div style={{ fontFamily: MONO, fontSize: 10, color: C.light, marginTop: 2 }}>{size} · {date}</div>
-      </div>
-      {status && <Pill label={status} color={status === "Current" ? C.green : C.amber} bg={status === "Current" ? C.greenBg : C.amberBg} border={status === "Current" ? C.greenBorder : C.amberBorder} />}
+      {isGlb && url && viewerOpen && (
+        <div style={{ margin: "4px 16px 12px", borderRadius: RS, overflow: "hidden", border: `1px solid ${C.border}` }}>
+          <model-viewer
+            src={url}
+            alt={name}
+            auto-rotate
+            camera-controls
+            shadow-intensity="1"
+            style={{ width: "100%", height: 300, background: "#f5f5f3" }}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -1443,6 +1472,7 @@ export default function ProjectView({ onBack, projectId }) {
                     type={getFileTypeKey(f)}
                     size={formatSize(f.size)}
                     date={new Date(f.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    url={getFileUrl(f)}
                   />
                 ))
               ) : (
