@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { C, SERIF, SANS, MONO, R, RS } from "./components/shared";
 import ProductsView from "./components/ProductsView";
+import ProjectsView from "./components/ProjectsView";
 import OrdersView from "./components/OrdersView";
 import ImagineView from "./components/ImagineView";
 import ProjectView from "./components/ProjectView";
@@ -1748,60 +1749,11 @@ export default function ZipJewelerDashboard() {
           <DashboardContent onNavigate={handleNavigate} onOpenTool={setActiveTool} storedProjects={storedProjects} />
         )}
         {activeNav === "projects" && (
-          <>
-            <header
-              style={{
-                padding: "24px 44px",
-                background: C.white,
-                borderBottom: `1px solid ${C.border}`,
-                position: "sticky",
-                top: 0,
-                zIndex: 40,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ fontFamily: SERIF, fontSize: 32, fontWeight: 600, color: C.black, letterSpacing: 5, textTransform: "uppercase" }}>Projects</div>
-                <button
-                  onClick={() => setShowNewProjectModal(true)}
-                  style={{
-                    fontFamily: SANS, fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase",
-                    padding: "10px 24px", background: C.coral, color: C.white, border: "none", borderRadius: RS,
-                    cursor: "pointer", transition: "background 0.2s",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = C.coralHover)}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = C.coral)}
-                >
-                  + New Project
-                </button>
-              </div>
-            </header>
-            <div style={{ padding: "28px 44px 60px", maxWidth: 1080 }}>
-              {storedProjects.length > 0 && (
-                <Section label="Your Projects" style={{ padding: "24px 28px 28px" }}>
-                  {storedProjects.map((p) => (
-                    <ProjectRow
-                      key={p.id}
-                      project={{
-                        id: p.id,
-                        name: p.name || "Untitled Project",
-                        collection: p.fields?.collection || p.type || "Custom",
-                        status: p.status || "draft",
-                        stage: p.stage || "Concept",
-                        time: timeAgo(p.updatedAt),
-                        coverImageUrl: p.fields?.coverImage?.url || null,
-                      }}
-                      onClick={() => handleNavigate("project-detail", p.id)}
-                    />
-                  ))}
-                </Section>
-              )}
-              <Section label="Sample Projects" style={{ padding: "24px 28px 28px" }}>
-                {PROJECTS.map((p) => (
-                  <ProjectRow key={p.id} project={p} onClick={() => handleNavigate("project-detail")} />
-                ))}
-              </Section>
-            </div>
-          </>
+          <ProjectsView
+            storedProjects={storedProjects}
+            onNewProject={() => setShowNewProjectModal(true)}
+            onOpenProject={(id) => handleNavigate("project-detail", id)}
+          />
         )}
         {activeNav === "products" && <ProductsView />}
         {activeNav === "orders" && <OrdersView />}
