@@ -400,3 +400,40 @@ export function saveGeneratedImageToProject(projectId, url, source = "render", p
 
   return meta;
 }
+
+/**
+ * Save a 3D model result (from Meshy) to a project.
+ *
+ * @param {string} projectId
+ * @param {object} meshyResult - { model_urls, thumbnail_url, texture_urls, task_id }
+ * @param {string} [sourceImageUrl] - The source image that was used to generate the 3D model
+ * @returns {object|null}
+ */
+export function save3DModelToProject(projectId, meshyResult, sourceImageUrl = "") {
+  const project = getProject(projectId);
+  if (!project) return null;
+
+  const entry = {
+    taskId: meshyResult.task_id,
+    modelUrls: meshyResult.model_urls || {},
+    thumbnailUrl: meshyResult.thumbnail_url || null,
+    textureUrls: meshyResult.texture_urls || [],
+    sourceImageUrl,
+    addedAt: new Date().toISOString(),
+  };
+
+  const models3d = [...(project.models3d || []), entry];
+  updateProject(projectId, { models3d });
+
+  // Also add as a file record for the files tab
+  if (meshyResult.model_urls?.glb) {
+    addFileToProject(projectId, {
+      name: `meshy_3d_${Date.now().toString(36)}.glb`,
+      url: meshyResult.model_urls.glb,
+      source: "meshy-3d",
+      mimeType: "model/gltf-binary",
+    });
+  }
+
+  return entry;
+}

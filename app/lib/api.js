@@ -70,3 +70,37 @@ export async function generateImage({ prompt, aspectRatio = "1:1", resolution = 
 
   return data;
 }
+
+/**
+ * Generate a 3D model from an image using the Meshy API.
+ *
+ * The actual Meshy call happens server-side in /api/meshy-3d —
+ * API credentials never leave the server.
+ *
+ * @param {object} opts
+ * @param {string} opts.imageUrl - Base64 data URI or publicly accessible image URL
+ * @param {boolean} [opts.enablePbr=true] - Generate PBR maps (metallic, roughness, normal)
+ * @param {string} [opts.topology="triangle"] - Mesh topology
+ * @param {number} [opts.targetPolycount=30000] - Target polygon count
+ * @returns {Promise<{ status: string, task_id: string, model_urls: object, thumbnail_url: string, texture_urls: Array }>}
+ */
+export async function generateMeshy3D({ imageUrl, enablePbr = true, topology = "triangle", targetPolycount = 30000 } = {}) {
+  const resp = await fetch("/api/meshy-3d", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      image_url: imageUrl,
+      enable_pbr: enablePbr,
+      topology,
+      target_polycount: targetPolycount,
+    }),
+  });
+
+  const data = await resp.json();
+
+  if (!resp.ok) {
+    throw new Error(data.error || `3D generation failed (${resp.status})`);
+  }
+
+  return data;
+}

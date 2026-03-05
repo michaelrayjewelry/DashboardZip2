@@ -9,8 +9,8 @@ import ImagineView from "./components/ImagineView";
 import ProjectView from "./components/ProjectView";
 import NewProjectModal from "./components/NewProjectModal";
 import NewProjectGateway from "./components/NewProjectGateway";
-import { generateImage, chatWithClaude } from "./lib/api";
-import { getProjects, createProject, saveGeneratedImageToProject } from "./lib/storage";
+import { generateImage, generateMeshy3D, chatWithClaude } from "./lib/api";
+import { getProjects, createProject, saveGeneratedImageToProject, save3DModelToProject } from "./lib/storage";
 
 // ─── Helpers ───
 function timeAgo(dateStr) {
@@ -331,6 +331,13 @@ const labelStyle = {
   fontFamily: SANS, fontSize: 10, fontWeight: 600, letterSpacing: 2.5,
   textTransform: "uppercase", color: C.label, marginBottom: 4,
 };
+const downloadBtnStyle = {
+  fontFamily: SANS, fontSize: 10, fontWeight: 600, letterSpacing: 1.5,
+  textTransform: "uppercase", padding: "8px 16px",
+  background: C.white, color: C.dark, border: `1px solid ${C.border}`,
+  borderRadius: RS, textDecoration: "none", cursor: "pointer",
+  transition: "border-color 0.2s",
+};
 
 function ModalField({ label, wide, textarea }) {
   return (
@@ -422,6 +429,13 @@ function ToolModal({ tool, onClose, onProjectCreated }) {
   const [gemstone, setGemstone] = useState("");
   const [finish, setFinish] = useState("");
   const [settingType, setSettingType] = useState("");
+
+  // 3D model generation state (Meshy)
+  const [is3dGenerating, setIs3dGenerating] = useState(false);
+  const [meshy3dResult, setMeshy3dResult] = useState(null);
+  const [meshy3dError, setMeshy3dError] = useState(null);
+  const [meshyTopology, setMeshyTopology] = useState("triangle");
+  const [meshyPolycount, setMeshyPolycount] = useState(30000);
 
   if (!tool) return null;
 
@@ -752,6 +766,35 @@ function ToolModal({ tool, onClose, onProjectCreated }) {
     const project = createProjectFromGeneration(generatedImages, fullPrompt);
     onProjectCreated?.(project.id);
     onClose();
+  };
+
+  // ── 3D Model Generation (Meshy AI) ──
+  const handle3dGenerate = async () => {
+    if (!uploadedImage || is3dGenerating) return;
+    setIs3dGenerating(true);
+    setMeshy3dError(null);
+    setMeshy3dResult(null);
+    try {
+      const result = await generateMeshy3D({
+        imageUrl: uploadedImage,
+        enablePbr: true,
+        topology: meshyTopology,
+        targetPolycount: meshyPolycount,
+      });
+      setMeshy3dResult(result);
+      // Save to a project
+      const project = createProject({
+        name: "3D Model Generation",
+        type: "3d-model",
+        fields: { topology: meshyTopology, polycount: meshyPolycount },
+      });
+      save3DModelToProject(project.id, result, uploadedImage);
+      onProjectCreated?.(project.id);
+    } catch (err) {
+      setMeshy3dError(err.message);
+    } finally {
+      setIs3dGenerating(false);
+    }
   };
 
   return (
@@ -1152,19 +1195,123 @@ function ToolModal({ tool, onClose, onProjectCreated }) {
             </>
           )}
 
-          {/* ── 3D Model Generation ── */}
+          {/* ── 3D Model Generation (Meshy AI) ── */}
           {is3d && (
             <>
-              <Section label="Source Image or CAD">
-                <ImageDropZone dragOver={dragOver} setDragOver={setDragOver} large />
+              <Section label="Source Image">
+                <ImageDropZone
+                  dragOver={dragOver} setDragOver={setDragOver} large
+                  previewUrl={uploadedImage}
+                  onFile={(dataUrl, file) => {
+                    setUploadedImage(dataUrl);
+                    setUploadedFile(file);
+                    setMeshy3dResult(null);
+                    setMeshy3dError(null);
+                  }}
+                  onClear={() => { setUploadedImage(null); setUploadedFile(null); setMeshy3dResult(null); setMeshy3dError(null); }}
+                />
+                {!uploadedImage && (
+                  <div style={{ fontFamily: SANS, fontSize: 11, color: C.light, marginTop: 8 }}>
+                    Upload an image of your jewelry design — Meshy AI will generate a full 3D model from it
+                  </div>
+                )}
               </Section>
+
               <Section label="Model Parameters">
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "20px 32px" }}>
-                  <ModalField label="Output Format" />
-                  <ModalField label="Resolution" />
-                  <ModalField label="Description" wide textarea />
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "16px 32px" }}>
+                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
+                    <div style={labelStyle}>Topology</div>
+                    <select value={meshyTopology} onChange={(e) => setMeshyTopology(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}>
+                      <option value="triangle">Triangle</option>
+                      <option value="quad">Quad</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
+                    <div style={labelStyle}>Target Polycount</div>
+                    <select value={meshyPolycount} onChange={(e) => setMeshyPolycount(Number(e.target.value))}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}>
+                      <option value={10000}>10,000 (Fast)</option>
+                      <option value={30000}>30,000 (Default)</option>
+                      <option value={50000}>50,000 (Detailed)</option>
+                      <option value={100000}>100,000 (High Detail)</option>
+                    </select>
+                  </div>
                 </div>
               </Section>
+
+              {/* 3D generation results */}
+              {(is3dGenerating || meshy3dResult || meshy3dError) && (
+                <Section label="Generated 3D Model">
+                  {is3dGenerating && (
+                    <div style={{ padding: "50px 0", textAlign: "center" }}>
+                      <div style={{
+                        width: 36, height: 36, border: `3px solid ${C.border}`, borderTopColor: C.coral,
+                        borderRadius: "50%", margin: "0 auto 16px",
+                        animation: "spin 0.8s linear infinite",
+                      }} />
+                      <div style={{ fontFamily: SANS, fontSize: 12, color: C.mid, letterSpacing: 1.5, textTransform: "uppercase" }}>
+                        Generating 3D Model with Meshy AI...
+                      </div>
+                      <div style={{ fontFamily: SANS, fontSize: 11, color: C.light, marginTop: 6 }}>
+                        This typically takes 2–5 minutes
+                      </div>
+                    </div>
+                  )}
+                  {meshy3dError && (
+                    <div style={{
+                      padding: "16px 20px", background: C.redBg, border: `1px solid ${C.redBorder}`,
+                      borderRadius: RS, marginBottom: 12,
+                    }}>
+                      <div style={{ fontFamily: SANS, fontSize: 12, color: C.coral, fontWeight: 600, marginBottom: 4 }}>
+                        3D Generation Failed
+                      </div>
+                      <div style={{ fontFamily: SANS, fontSize: 12, color: C.mid }}>{meshy3dError}</div>
+                    </div>
+                  )}
+                  {meshy3dResult && (
+                    <div>
+                      {/* Interactive 3D Viewer */}
+                      {meshy3dResult.model_urls?.glb && (
+                        <div style={{ borderRadius: RS, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 16 }}>
+                          <model-viewer
+                            src={meshy3dResult.model_urls.glb}
+                            poster={meshy3dResult.thumbnail_url || undefined}
+                            alt="Generated 3D jewelry model"
+                            auto-rotate
+                            camera-controls
+                            shadow-intensity="1"
+                            style={{ width: "100%", height: 400, background: "#f5f5f3" }}
+                          />
+                        </div>
+                      )}
+                      {/* Download Links */}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        {meshy3dResult.model_urls?.glb && (
+                          <a href={meshy3dResult.model_urls.glb} target="_blank" rel="noopener noreferrer" style={downloadBtnStyle}>
+                            ⬇ GLB
+                          </a>
+                        )}
+                        {meshy3dResult.model_urls?.fbx && (
+                          <a href={meshy3dResult.model_urls.fbx} target="_blank" rel="noopener noreferrer" style={downloadBtnStyle}>
+                            ⬇ FBX
+                          </a>
+                        )}
+                        {meshy3dResult.model_urls?.usdz && (
+                          <a href={meshy3dResult.model_urls.usdz} target="_blank" rel="noopener noreferrer" style={downloadBtnStyle}>
+                            ⬇ USDZ
+                          </a>
+                        )}
+                        {meshy3dResult.model_urls?.obj && (
+                          <a href={meshy3dResult.model_urls.obj} target="_blank" rel="noopener noreferrer" style={downloadBtnStyle}>
+                            ⬇ OBJ
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </Section>
+              )}
             </>
           )}
 
@@ -1200,11 +1347,19 @@ function ToolModal({ tool, onClose, onProjectCreated }) {
           {/* Actions */}
           <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
             {(() => {
-              const canGenerate = isImageTool && (prompt.trim() || uploadedImage || jewelryType);
-              const isDisabled = isImageTool ? (isGenerating || isAnalyzing || !canGenerate) : false;
+              const canGenerate = is3d
+                ? (uploadedImage && !is3dGenerating)
+                : isImageTool && (prompt.trim() || uploadedImage || jewelryType);
+              const isDisabled = is3d
+                ? (is3dGenerating || !uploadedImage)
+                : isImageTool ? (isGenerating || isAnalyzing || !canGenerate) : false;
+              const handleClick = is3d ? handle3dGenerate : (isImageTool ? handleGenerate : undefined);
+              const buttonLabel = is3d
+                ? (is3dGenerating ? "Generating 3D Model..." : meshy3dResult ? "Regenerate 3D Model" : actionLabel)
+                : (isAnalyzing ? "Analyzing image..." : isGenerating ? "Generating..." : actionLabel);
               return (
                 <button
-                  onClick={isImageTool ? handleGenerate : undefined}
+                  onClick={handleClick}
                   disabled={isDisabled}
                   style={{
                     flex: 1, fontFamily: SANS, fontSize: 12, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase",
@@ -1217,12 +1372,12 @@ function ToolModal({ tool, onClose, onProjectCreated }) {
                   onMouseEnter={(e) => { if (!isDisabled) e.currentTarget.style.background = C.coralHover; }}
                   onMouseLeave={(e) => { if (!isDisabled) e.currentTarget.style.background = C.coral; }}
                 >
-                  {isAnalyzing ? "Analyzing image..." : isGenerating ? "Generating..." : actionLabel}
+                  {buttonLabel}
                 </button>
               );
             })()}
             <button
-              onClick={isImageTool && !isFileHub && generatedImages.length === 0 ? handleSaveDraft : onClose}
+              onClick={isImageTool && !isFileHub && generatedImages.length === 0 && !meshy3dResult ? handleSaveDraft : onClose}
               style={{
                 fontFamily: SANS, fontSize: 12, fontWeight: 500, letterSpacing: 1.5, textTransform: "uppercase",
                 padding: "14px 24px", background: C.white, color: C.mid, border: `1px solid ${C.border}`,
@@ -1231,7 +1386,7 @@ function ToolModal({ tool, onClose, onProjectCreated }) {
               onMouseEnter={(e) => (e.currentTarget.style.borderColor = C.borderHover)}
               onMouseLeave={(e) => (e.currentTarget.style.borderColor = C.border)}
             >
-              {generatedImages.length > 0 ? "Done" : isFileHub ? "Close" : "Save Draft"}
+              {generatedImages.length > 0 || meshy3dResult ? "Done" : isFileHub ? "Close" : "Save Draft"}
             </button>
           </div>
         </div>

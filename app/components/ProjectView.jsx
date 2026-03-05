@@ -3,9 +3,9 @@ import { C, SERIF, SANS, MONO, R, RS } from "./shared";
 import {
   getProject, updateProject, getProjectFiles, getProjectFilesByCategory,
   uploadFileToProject, getFileBlobURL, FILE_CATEGORIES,
-  saveGeneratedImageToProject, saveChatHistory, getChatHistory,
+  saveGeneratedImageToProject, save3DModelToProject, saveChatHistory, getChatHistory,
 } from "../lib/storage";
-import { generateImage, chatWithClaudeJSON } from "../lib/api";
+import { generateImage, generateMeshy3D, chatWithClaudeJSON } from "../lib/api";
 
 // ─── SYSTEM PROMPTS ───
 
@@ -250,6 +250,13 @@ function SmallBtn({ label, onClick, primary, icon }) {
   );
 }
 
+const dl3dStyle = {
+  fontFamily: SANS, fontSize: 9, fontWeight: 600, letterSpacing: 1.5,
+  textTransform: "uppercase", padding: "5px 12px",
+  background: C.white, color: C.dark, border: `1px solid ${C.border}`,
+  borderRadius: RS, textDecoration: "none", cursor: "pointer",
+};
+
 function FileCard({ name, type, size, date, status }) {
   const [h, setH] = useState(false);
   const typeIcons = {
@@ -456,6 +463,10 @@ export default function ProjectView({ onBack, projectId }) {
   const [previewImage, setPreviewImage] = useState(null);
   const [coverPickerOpen, setCoverPickerOpen] = useState(false);
 
+  // ─── 3D model generation state (Meshy) ───
+  const [is3dGenerating, setIs3dGenerating] = useState(false);
+  const [meshy3dError, setMeshy3dError] = useState(null);
+
   // Load project data from storage (hoisted before BOM state initializers)
   const storedProject = projectId ? getProject(projectId) : null;
 
@@ -582,6 +593,24 @@ export default function ProjectView({ onBack, projectId }) {
       }
     } catch (err) {
       setGenState({ loading: false, error: err.message, imageUrl: null });
+    }
+  };
+
+  // ── 3D model generation from project images (Meshy AI) ──
+  const handleGenerate3D = async (sourceImageUrl) => {
+    if (is3dGenerating || !sourceImageUrl) return;
+    setIs3dGenerating(true);
+    setMeshy3dError(null);
+    try {
+      const result = await generateMeshy3D({ imageUrl: sourceImageUrl, enablePbr: true });
+      if (projectId) {
+        save3DModelToProject(projectId, result, sourceImageUrl);
+        setProjectFiles(getProjectFiles(projectId));
+      }
+    } catch (err) {
+      setMeshy3dError(err.message);
+    } finally {
+      setIs3dGenerating(false);
     }
   };
 
@@ -1248,9 +1277,65 @@ export default function ProjectView({ onBack, projectId }) {
               <FileCard name="crown-thorns-v1.step" type="cad" size="3.1 MB" date="Feb 25, 2026" />
             </Section>
 
-            <Section label="3D Models" count={(filesByCategory.model3d || []).length || 2} rightAction={<SmallBtn label="+ Upload Model" onClick={() => triggerUpload("3d")} />}>
-              <FileCard name="crown-thorns-render.stl" type="model" size="12.6 MB" date="Mar 2, 2026" status="Current" />
-              <FileCard name="crown-thorns-print.stl" type="model" size="8.4 MB" date="Mar 1, 2026" />
+            <Section label="3D Models" count={(storedProject?.models3d || []).length + ((filesByCategory.model3d || []).length || 0)} rightAction={
+              <div style={{ display: "flex", gap: 6 }}>
+                {storedGeneratedImages.length > 0 && (
+                  <SmallBtn
+                    label={is3dGenerating ? "Generating..." : "🧊 Generate 3D"}
+                    primary
+                    onClick={() => {
+                      const lastImg = storedGeneratedImages[storedGeneratedImages.length - 1];
+                      if (lastImg?.url) handleGenerate3D(lastImg.url);
+                    }}
+                  />
+                )}
+                <SmallBtn label="+ Upload Model" onClick={() => triggerUpload("3d")} />
+              </div>
+            }>
+              {meshy3dError && (
+                <div style={{ padding: "10px 14px", background: C.redBg, border: `1px solid ${C.redBorder}`, borderRadius: RS, marginBottom: 10 }}>
+                  <div style={{ fontFamily: SANS, fontSize: 11, color: C.coral }}>{meshy3dError}</div>
+                </div>
+              )}
+              {is3dGenerating && (
+                <div style={{ padding: "30px 0", textAlign: "center" }}>
+                  <div style={{ width: 28, height: 28, border: `3px solid ${C.border}`, borderTopColor: C.coral, borderRadius: "50%", margin: "0 auto 12px", animation: "spin 0.8s linear infinite" }} />
+                  <div style={{ fontFamily: SANS, fontSize: 11, color: C.mid, letterSpacing: 1.5, textTransform: "uppercase" }}>Generating 3D with Meshy AI...</div>
+                  <div style={{ fontFamily: SANS, fontSize: 10, color: C.light, marginTop: 4 }}>This typically takes 2–5 minutes</div>
+                </div>
+              )}
+              {(storedProject?.models3d || []).map((m, i) => (
+                <div key={m.taskId || i} style={{ marginBottom: 16 }}>
+                  {m.modelUrls?.glb && (
+                    <div style={{ borderRadius: RS, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 8 }}>
+                      <model-viewer
+                        src={m.modelUrls.glb}
+                        poster={m.thumbnailUrl || undefined}
+                        alt="3D jewelry model"
+                        auto-rotate
+                        camera-controls
+                        shadow-intensity="1"
+                        style={{ width: "100%", height: 280, background: "#f5f5f3" }}
+                      />
+                    </div>
+                  )}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {m.modelUrls?.glb && <a href={m.modelUrls.glb} target="_blank" rel="noopener noreferrer" style={dl3dStyle}>⬇ GLB</a>}
+                    {m.modelUrls?.fbx && <a href={m.modelUrls.fbx} target="_blank" rel="noopener noreferrer" style={dl3dStyle}>⬇ FBX</a>}
+                    {m.modelUrls?.usdz && <a href={m.modelUrls.usdz} target="_blank" rel="noopener noreferrer" style={dl3dStyle}>⬇ USDZ</a>}
+                    {m.modelUrls?.obj && <a href={m.modelUrls.obj} target="_blank" rel="noopener noreferrer" style={dl3dStyle}>⬇ OBJ</a>}
+                    <span style={{ fontFamily: MONO, fontSize: 9, color: C.light, alignSelf: "center", marginLeft: 4 }}>
+                      {new Date(m.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {(storedProject?.models3d || []).length === 0 && !is3dGenerating && (
+                <>
+                  <FileCard name="crown-thorns-render.stl" type="model" size="12.6 MB" date="Mar 2, 2026" status="Current" />
+                  <FileCard name="crown-thorns-print.stl" type="model" size="8.4 MB" date="Mar 1, 2026" />
+                </>
+              )}
             </Section>
 
             <Section label="Production Notes">
