@@ -495,6 +495,7 @@ export default function ProjectView({ onBack, projectId }) {
   // ─── 3D model generation state (Meshy) ───
   const [is3dGenerating, setIs3dGenerating] = useState(false);
   const [meshy3dError, setMeshy3dError] = useState(null);
+  const [threeDPickerOpen, setThreeDPickerOpen] = useState(false);
 
   // Load project data from storage (hoisted before BOM state initializers)
   const storedProject = projectId ? getProject(projectId) : null;
@@ -824,6 +825,28 @@ export default function ProjectView({ onBack, projectId }) {
     return `${(bytes / 1048576).toFixed(1)} MB`;
   };
 
+  // Gather ALL images for picker modals (cover image, 3D generation, etc.)
+  const allImages = (() => {
+    const imgs = [];
+    const seenUrls = new Set();
+    const addImage = (entry) => {
+      if (entry.url && !seenUrls.has(entry.url)) { seenUrls.add(entry.url); imgs.push(entry); }
+    };
+    for (const cat of ["render", "reference", "sketch", "marketing", "other"]) {
+      (filesByCategory[cat] || []).forEach((file) => {
+        const url = getFileUrl(file);
+        if (url) addImage({ fileId: file.id, url, label: file.name });
+      });
+    }
+    (storedGeneratedImages || []).forEach((img, i) => {
+      addImage({ fileId: null, url: img.url, label: `AI Concept ${i + 1}` });
+    });
+    if (genState.imageUrl) {
+      addImage({ fileId: null, url: genState.imageUrl, label: "New Concept" });
+    }
+    return imgs;
+  })();
+
   return (
     <>
       {/* Hidden file input for uploads */}
@@ -915,25 +938,6 @@ export default function ProjectView({ onBack, projectId }) {
             { label: "Budget", value: f.budget || "—" },
             { label: "Timeline", value: f.timeline || "—" },
           ];
-          // Gather ALL image files + generated images for gallery picker
-          const allImages = [];
-          const seenUrls = new Set();
-          const addImage = (entry) => {
-            if (entry.url && !seenUrls.has(entry.url)) { seenUrls.add(entry.url); allImages.push(entry); }
-          };
-          for (const cat of ["render", "reference", "sketch", "marketing", "other"]) {
-            (filesByCategory[cat] || []).forEach((file) => {
-              const url = getFileUrl(file);
-              if (url) addImage({ fileId: file.id, url, label: file.name });
-            });
-          }
-          (storedGeneratedImages || []).forEach((img, i) => {
-            addImage({ fileId: null, url: img.url, label: `AI Concept ${i + 1}` });
-          });
-          // Include the just-generated image (may not be persisted to storage yet)
-          if (genState.imageUrl) {
-            addImage({ fileId: null, url: genState.imageUrl, label: "New Concept" });
-          }
           return (
             <>
               {/* ── Product Card ── */}
@@ -1007,6 +1011,61 @@ export default function ProjectView({ onBack, projectId }) {
                               position: "relative", transition: "border-color 0.2s",
                             }}
                             onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.blue; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; }}
+                          >
+                            <div style={{
+                              position: "absolute", bottom: 0, left: 0, right: 0, padding: "16px 6px 5px",
+                              background: "linear-gradient(transparent, rgba(0,0,0,0.6))",
+                              fontFamily: SANS, fontSize: 9, color: "#fff", letterSpacing: 1,
+                              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                            }}>
+                              {img.label}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ── 3D Generation Image Picker Modal ── */}
+              {threeDPickerOpen && (
+                <div onClick={() => setThreeDPickerOpen(false)} style={{
+                  position: "fixed", inset: 0, zIndex: 9998,
+                  background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <div onClick={(e) => e.stopPropagation()} style={{
+                    background: C.white, borderRadius: R, padding: 28, width: 520, maxHeight: "80vh",
+                    overflow: "hidden", display: "flex", flexDirection: "column",
+                    border: `1px solid ${C.border}`,
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <div style={{ fontFamily: SANS, fontSize: 10.5, fontWeight: 600, letterSpacing: 3, textTransform: "uppercase", color: C.label }}>Select Image for 3D Generation</div>
+                      <button onClick={() => setThreeDPickerOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: C.mid, fontSize: 20, lineHeight: 1 }}>{"\u2715"}</button>
+                    </div>
+                    <div style={{ fontFamily: SANS, fontSize: 11.5, color: C.light, marginBottom: 16 }}>
+                      Choose which image to convert into a 3D model with Meshy AI
+                    </div>
+                    {allImages.length === 0 ? (
+                      <div style={{ padding: "40px 0", textAlign: "center", fontFamily: SANS, fontSize: 13, color: C.light }}>
+                        No images in project yet. Upload or generate images first.
+                      </div>
+                    ) : (
+                      <div style={{ overflowY: "auto", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+                        {allImages.map((img, i) => (
+                          <div
+                            key={img.fileId || img.url || i}
+                            onClick={() => {
+                              setThreeDPickerOpen(false);
+                              handleGenerate3D(img.url);
+                            }}
+                            style={{
+                              aspectRatio: "1", borderRadius: RS, overflow: "hidden", cursor: "pointer",
+                              background: `url(${img.url}) center/cover`, border: `2px solid ${C.border}`,
+                              position: "relative", transition: "border-color 0.2s",
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.coral; }}
                             onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; }}
                           >
                             <div style={{
@@ -1315,14 +1374,11 @@ export default function ProjectView({ onBack, projectId }) {
 
             <Section label="3D Models" count={(storedProject?.models3d || []).length + ((filesByCategory.model3d || []).length || 0)} rightAction={
               <div style={{ display: "flex", gap: 6 }}>
-                {storedGeneratedImages.length > 0 && (
+                {allImages.length > 0 && (
                   <SmallBtn
                     label={is3dGenerating ? "Generating..." : "🧊 Generate 3D"}
                     primary
-                    onClick={() => {
-                      const lastImg = storedGeneratedImages[storedGeneratedImages.length - 1];
-                      if (lastImg?.url) handleGenerate3D(lastImg.url);
-                    }}
+                    onClick={() => { if (!is3dGenerating) setThreeDPickerOpen(true); }}
                   />
                 )}
                 <SmallBtn label="+ Upload Model" onClick={() => triggerUpload("3d")} />
