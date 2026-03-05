@@ -7,7 +7,7 @@ import OrdersView from "./components/OrdersView";
 import ImagineView from "./components/ImagineView";
 import ProjectView from "./components/ProjectView";
 import NewProjectModal from "./components/NewProjectModal";
-import { generateImage } from "./lib/api";
+import { generateImage, chatWithClaude } from "./lib/api";
 import { getProjects, createProject, saveGeneratedImageToProject } from "./lib/storage";
 
 // ─── Helpers ───
@@ -402,7 +402,6 @@ function ToolModal({ tool, onClose, onProjectCreated }) {
   const [aspectRatio, setAspectRatio] = useState("1:1");
   const [resolution, setResolution] = useState("1080p");
   const [cameraAngle, setCameraAngle] = useState("front");
-  const [sceneStyle, setSceneStyle] = useState("studio");
   const [lighting, setLighting] = useState("studio");
   const [background, setBackground] = useState("white");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -410,10 +409,23 @@ function ToolModal({ tool, onClose, onProjectCreated }) {
   const [error, setError] = useState(null);
   const [uploadedImage, setUploadedImage] = useState(null);
   const [uploadedFile, setUploadedFile] = useState(null);
+  const [imageAnalysis, setImageAnalysis] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Jewelry-specific fields for sketch-to-jewelry and technical-to-image
+  const [jewelryType, setJewelryType] = useState("");
+  const [metal, setMetal] = useState("");
+  const [gemstone, setGemstone] = useState("");
+  const [finish, setFinish] = useState("");
+  const [settingType, setSettingType] = useState("");
 
   if (!tool) return null;
 
-  const isImageTool = ["sketch-to-jewelry", "technical-to-image", "image-to-marketing"].includes(tool.id);
+  const isSketchTool = tool.id === "sketch-to-jewelry";
+  const isTechnicalTool = tool.id === "technical-to-image";
+  const isJewelryTool = isSketchTool || isTechnicalTool;
+  const isMarketingTool = tool.id === "image-to-marketing";
+  const isImageTool = isJewelryTool || isMarketingTool;
   const isEstimate = tool.id === "manufacture-estimate";
   const is3d = tool.id === "3d-model";
   const isCollection = tool.id === "start-collection";
@@ -429,71 +441,287 @@ function ToolModal({ tool, onClose, onProjectCreated }) {
     { value: "wrist-shot", label: "Wrist / On-Body" },
   ];
 
-  const SCENE_STYLES = [
-    { value: "studio", label: "Studio Product" },
-    { value: "lifestyle", label: "Lifestyle" },
-    { value: "editorial", label: "Editorial" },
-    { value: "catalog", label: "Catalog / E-Commerce" },
-    { value: "dramatic", label: "Dramatic / Moody" },
-  ];
-
   const LIGHTING_OPTIONS = [
-    { value: "studio", label: "Studio Soft" },
-    { value: "natural", label: "Natural Light" },
-    { value: "dramatic", label: "Dramatic" },
-    { value: "golden-hour", label: "Golden Hour" },
-    { value: "rim", label: "Rim / Backlit" },
+    { value: "studio", label: "soft diffused studio" },
+    { value: "natural", label: "natural window" },
+    { value: "dramatic", label: "dramatic directional" },
+    { value: "golden-hour", label: "warm golden hour" },
+    { value: "rim", label: "rim backlit" },
   ];
 
   const BACKGROUND_OPTIONS = [
-    { value: "white", label: "White Seamless" },
-    { value: "gradient", label: "Soft Gradient" },
-    { value: "marble", label: "Marble Surface" },
-    { value: "velvet", label: "Velvet / Fabric" },
-    { value: "natural", label: "Natural / Organic" },
-    { value: "transparent", label: "Transparent" },
+    { value: "white", label: "clean white seamless" },
+    { value: "gradient", label: "soft neutral gradient" },
+    { value: "marble", label: "polished marble surface" },
+    { value: "velvet", label: "dark velvet fabric" },
+    { value: "natural", label: "natural organic texture" },
+    { value: "black", label: "solid black" },
   ];
 
-  // Build a prompt that incorporates the tool context + all settings + reference image context
-  const buildPrompt = () => {
-    const toolContext = {
-      "sketch-to-jewelry": "Photorealistic custom jewelry product photo",
-      "technical-to-image": "Convert technical jewelry drawing into a photorealistic product image, detailed metalwork",
-      "image-to-marketing": "Luxury jewelry marketing photograph, editorial style, elegant composition",
-    };
-    const base = toolContext[tool.id] || "";
-    const anglePart = cameraAngle !== "front" ? `${CAMERA_ANGLES.find(a => a.value === cameraAngle)?.label || cameraAngle} angle` : "front view";
-    const scenePart = `${SCENE_STYLES.find(s => s.value === sceneStyle)?.label || sceneStyle} style`;
-    const lightPart = `${LIGHTING_OPTIONS.find(l => l.value === lighting)?.label || lighting} lighting`;
-    const bgPart = `${BACKGROUND_OPTIONS.find(b => b.value === background)?.label || background} background`;
-    const settingsParts = [anglePart, scenePart, lightPart, bgPart].join(", ");
-    const refContext = uploadedImage ? "Based on the uploaded reference sketch/image, " : "";
-    const parts = [refContext + base, prompt, style, settingsParts].filter(Boolean);
-    return parts.join(". ");
+  const JEWELRY_TYPES = [
+    { value: "", label: "Select type..." },
+    { value: "ring", label: "Ring" },
+    { value: "engagement ring", label: "Engagement Ring" },
+    { value: "wedding band", label: "Wedding Band" },
+    { value: "necklace", label: "Necklace" },
+    { value: "pendant", label: "Pendant" },
+    { value: "bracelet", label: "Bracelet" },
+    { value: "bangle", label: "Bangle" },
+    { value: "earrings", label: "Earrings" },
+    { value: "brooch", label: "Brooch" },
+    { value: "cuff", label: "Cuff" },
+  ];
+
+  const METAL_OPTIONS = [
+    { value: "", label: "Select metal..." },
+    { value: "18k yellow gold", label: "18K Yellow Gold" },
+    { value: "14k yellow gold", label: "14K Yellow Gold" },
+    { value: "18k white gold", label: "18K White Gold" },
+    { value: "14k white gold", label: "14K White Gold" },
+    { value: "18k rose gold", label: "18K Rose Gold" },
+    { value: "14k rose gold", label: "14K Rose Gold" },
+    { value: "platinum", label: "Platinum" },
+    { value: "sterling silver", label: "Sterling Silver" },
+    { value: "mixed metals", label: "Mixed Metals" },
+  ];
+
+  const FINISH_OPTIONS = [
+    { value: "", label: "Select finish..." },
+    { value: "high polish", label: "High Polish" },
+    { value: "brushed matte", label: "Brushed / Matte" },
+    { value: "satin", label: "Satin" },
+    { value: "hammered", label: "Hammered" },
+    { value: "textured", label: "Textured" },
+    { value: "antiqued", label: "Antiqued / Oxidized" },
+  ];
+
+  const SETTING_OPTIONS = [
+    { value: "", label: "Select setting..." },
+    { value: "prong", label: "Prong" },
+    { value: "bezel", label: "Bezel" },
+    { value: "pave", label: "Pave" },
+    { value: "channel", label: "Channel" },
+    { value: "tension", label: "Tension" },
+    { value: "flush", label: "Flush / Gypsy" },
+    { value: "halo", label: "Halo" },
+    { value: "cluster", label: "Cluster" },
+  ];
+
+  // ── Analyze uploaded image with Claude Vision ──
+  const analyzeImage = async (dataUrl) => {
+    setIsAnalyzing(true);
+    try {
+      const base64 = dataUrl.split(",")[1];
+      const mimeMatch = dataUrl.match(/^data:(image\/[^;]+);/);
+      const mediaType = mimeMatch ? mimeMatch[1] : "image/png";
+
+      const systemPrompt = isSketchTool
+        ? "You are a jewelry design expert analyzing a rough sketch. Describe ONLY what you see in the image in precise detail: the type of jewelry piece, its shape and silhouette, decorative elements, stone placements, band/chain style, proportions, and any design motifs. Be specific about curves, angles, symmetry, and structural details. Output a single dense paragraph. Do not suggest improvements or give opinions."
+        : "You are a jewelry technical analyst examining a technical drawing. Describe ONLY what you see: the type of jewelry piece, exact structural elements, measurements or proportions visible, stone cuts and placement positions, prong/bezel/setting details, band width, construction joints, and engineering details. Be precise about dimensions, angles, and construction specifications. Output a single dense paragraph. Do not suggest improvements or give opinions.";
+
+      const result = await chatWithClaude({
+        system: systemPrompt,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+            { type: "text", text: isSketchTool
+              ? "Describe this jewelry sketch in detail. Focus on the shape, design elements, proportions, and any visible features."
+              : "Describe this technical jewelry drawing in detail. Focus on construction, dimensions, stone placements, and structural elements."
+            },
+          ],
+        }],
+        maxTokens: 500,
+      });
+      setImageAnalysis(result);
+    } catch {
+      setImageAnalysis("");
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
-  // Create a project and save generated images to it
+  // ── Tool-specific prompt builders ──
+
+  const buildSketchPrompt = () => {
+    const parts = [];
+    // Quality prefix — proven keywords for photorealistic jewelry generation
+    parts.push("Photorealistic studio product photograph of custom jewelry, masterpiece quality, ultra detailed, professional jewelry photography, 8k");
+
+    // Jewelry type
+    if (jewelryType) parts.push(jewelryType);
+
+    // Image analysis from Claude Vision (the actual sketch content)
+    if (imageAnalysis) parts.push(imageAnalysis);
+
+    // User description
+    if (prompt.trim()) parts.push(prompt.trim());
+
+    // Material specs
+    if (metal) parts.push(`made of ${metal}`);
+    if (gemstone) parts.push(`featuring ${gemstone}`);
+    if (settingType) parts.push(`${settingType} setting`);
+    if (finish) parts.push(`${finish} finish`);
+    if (style) parts.push(`${style} style`);
+
+    // Photography settings
+    const angle = CAMERA_ANGLES.find(a => a.value === cameraAngle);
+    parts.push(`${angle?.label || "front"} view`);
+    const light = LIGHTING_OPTIONS.find(l => l.value === lighting);
+    parts.push(`${light?.label || "soft diffused studio"} lighting`);
+    const bg = BACKGROUND_OPTIONS.find(b => b.value === background);
+    parts.push(`${bg?.label || "clean white seamless"} background`);
+
+    // Quality tail
+    parts.push("dazzling light reflections, sharp focus, luxury aesthetic");
+
+    return parts.join(", ");
+  };
+
+  const buildTechnicalPrompt = () => {
+    const parts = [];
+    // Precision-focused prefix
+    parts.push("Photorealistic product photograph of precision-crafted jewelry, exact proportions, highly detailed metalwork, technically accurate construction, professional product photography, 8k");
+
+    // Jewelry type
+    if (jewelryType) parts.push(jewelryType);
+
+    // Image analysis from Claude Vision (the actual technical drawing content)
+    if (imageAnalysis) parts.push(`precise reproduction of: ${imageAnalysis}`);
+
+    // User technical description
+    if (prompt.trim()) parts.push(prompt.trim());
+
+    // Material specs with technical phrasing
+    if (metal) parts.push(`constructed in ${metal}`);
+    if (gemstone) parts.push(`set with ${gemstone}`);
+    if (settingType) parts.push(`${settingType} stone setting`);
+    if (finish) parts.push(`${finish} surface finish`);
+    if (style) parts.push(`${style} design language`);
+
+    // Photography settings
+    const angle = CAMERA_ANGLES.find(a => a.value === cameraAngle);
+    parts.push(`${angle?.label || "front"} view`);
+    const light = LIGHTING_OPTIONS.find(l => l.value === lighting);
+    parts.push(`${light?.label || "soft diffused studio"} lighting`);
+    const bg = BACKGROUND_OPTIONS.find(b => b.value === background);
+    parts.push(`${bg?.label || "clean white seamless"} background`);
+
+    // Technical quality tail
+    parts.push("macro detail, true-to-spec proportions, sharp focus, professional jewelry rendering");
+
+    return parts.join(", ");
+  };
+
+  const buildMarketingPrompt = () => {
+    const base = "Luxury jewelry marketing photograph, editorial style, elegant composition";
+    const anglePart = cameraAngle !== "front" ? `${CAMERA_ANGLES.find(a => a.value === cameraAngle)?.label || cameraAngle} angle` : "front view";
+    const lightPart = `${LIGHTING_OPTIONS.find(l => l.value === lighting)?.label || lighting} lighting`;
+    const bgPart = `${BACKGROUND_OPTIONS.find(b => b.value === background)?.label || background} background`;
+    const settingsParts = [anglePart, lightPart, bgPart].join(", ");
+    const p = [base, prompt, style, settingsParts].filter(Boolean);
+    return p.join(". ");
+  };
+
+  const buildPrompt = () => {
+    if (isSketchTool) return buildSketchPrompt();
+    if (isTechnicalTool) return buildTechnicalPrompt();
+    return buildMarketingPrompt();
+  };
+
+  // ── Create a project and save generated images ──
   const createProjectFromGeneration = (images, promptUsed) => {
-    const projectName = prompt.trim().length > 40 ? prompt.trim().slice(0, 40) + "…" : prompt.trim() || "Sketch to Jewelry";
+    const projectName = prompt.trim().length > 40 ? prompt.trim().slice(0, 40) + "…" : prompt.trim() || tool.title;
     const project = createProject({
       name: projectName,
-      type: "sketch-to-jewelry",
-      fields: { style, cameraAngle, sceneStyle, lighting, background, aspectRatio, resolution, promptUsed },
+      type: tool.id,
+      fields: {
+        ...(isJewelryTool ? { jewelryType, metal, gemstone, finish, settingType } : {}),
+        style, cameraAngle, lighting, background, aspectRatio, resolution,
+        ...(imageAnalysis ? { imageAnalysis } : {}),
+        promptUsed,
+      },
     });
     for (const img of images) {
-      saveGeneratedImageToProject(project.id, img.url, "sketch-to-jewelry", promptUsed);
+      saveGeneratedImageToProject(project.id, img.url, tool.id, promptUsed);
     }
     return project;
   };
 
   const handleGenerate = async () => {
-    if (!prompt.trim() && !uploadedImage) return;
+    if (!prompt.trim() && !uploadedImage && !jewelryType) return;
     setIsGenerating(true);
     setError(null);
     setGeneratedImages([]);
 
     try {
-      const fullPrompt = buildPrompt();
+      // If there's an uploaded image but no analysis yet, analyze it and use the result directly
+      let analysisText = imageAnalysis;
+      if (uploadedImage && !imageAnalysis && isJewelryTool) {
+        setIsAnalyzing(true);
+        try {
+          const base64 = uploadedImage.split(",")[1];
+          const mimeMatch = uploadedImage.match(/^data:(image\/[^;]+);/);
+          const mediaType = mimeMatch ? mimeMatch[1] : "image/png";
+          const systemPrompt = isSketchTool
+            ? "You are a jewelry design expert analyzing a rough sketch. Describe ONLY what you see in the image in precise detail: the type of jewelry piece, its shape and silhouette, decorative elements, stone placements, band/chain style, proportions, and any design motifs. Be specific about curves, angles, symmetry, and structural details. Output a single dense paragraph. Do not suggest improvements or give opinions."
+            : "You are a jewelry technical analyst examining a technical drawing. Describe ONLY what you see: the type of jewelry piece, exact structural elements, measurements or proportions visible, stone cuts and placement positions, prong/bezel/setting details, band width, construction joints, and engineering details. Be precise about dimensions, angles, and construction specifications. Output a single dense paragraph. Do not suggest improvements or give opinions.";
+          analysisText = await chatWithClaude({
+            system: systemPrompt,
+            messages: [{ role: "user", content: [
+              { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+              { type: "text", text: isSketchTool ? "Describe this jewelry sketch in detail." : "Describe this technical jewelry drawing in detail." },
+            ]}],
+            maxTokens: 500,
+          });
+          setImageAnalysis(analysisText);
+        } catch { analysisText = ""; } finally { setIsAnalyzing(false); }
+      }
+
+      // Build prompt with the analysis text available
+      const buildFinalPrompt = () => {
+        if (isSketchTool) {
+          const parts = ["Photorealistic studio product photograph of custom jewelry, masterpiece quality, ultra detailed, professional jewelry photography, 8k"];
+          if (jewelryType) parts.push(jewelryType);
+          if (analysisText) parts.push(analysisText);
+          if (prompt.trim()) parts.push(prompt.trim());
+          if (metal) parts.push(`made of ${metal}`);
+          if (gemstone) parts.push(`featuring ${gemstone}`);
+          if (settingType) parts.push(`${settingType} setting`);
+          if (finish) parts.push(`${finish} finish`);
+          if (style) parts.push(`${style} style`);
+          const angle = CAMERA_ANGLES.find(a => a.value === cameraAngle);
+          parts.push(`${angle?.label || "front"} view`);
+          const light = LIGHTING_OPTIONS.find(l => l.value === lighting);
+          parts.push(`${light?.label || "soft diffused studio"} lighting`);
+          const bg = BACKGROUND_OPTIONS.find(b => b.value === background);
+          parts.push(`${bg?.label || "clean white seamless"} background`);
+          parts.push("dazzling light reflections, sharp focus, luxury aesthetic");
+          return parts.join(", ");
+        }
+        if (isTechnicalTool) {
+          const parts = ["Photorealistic product photograph of precision-crafted jewelry, exact proportions, highly detailed metalwork, technically accurate construction, professional product photography, 8k"];
+          if (jewelryType) parts.push(jewelryType);
+          if (analysisText) parts.push(`precise reproduction of: ${analysisText}`);
+          if (prompt.trim()) parts.push(prompt.trim());
+          if (metal) parts.push(`constructed in ${metal}`);
+          if (gemstone) parts.push(`set with ${gemstone}`);
+          if (settingType) parts.push(`${settingType} stone setting`);
+          if (finish) parts.push(`${finish} surface finish`);
+          if (style) parts.push(`${style} design language`);
+          const angle = CAMERA_ANGLES.find(a => a.value === cameraAngle);
+          parts.push(`${angle?.label || "front"} view`);
+          const light = LIGHTING_OPTIONS.find(l => l.value === lighting);
+          parts.push(`${light?.label || "soft diffused studio"} lighting`);
+          const bg = BACKGROUND_OPTIONS.find(b => b.value === background);
+          parts.push(`${bg?.label || "clean white seamless"} background`);
+          parts.push("macro detail, true-to-spec proportions, sharp focus, professional jewelry rendering");
+          return parts.join(", ");
+        }
+        return buildMarketingPrompt();
+      };
+
+      const fullPrompt = buildFinalPrompt();
       const result = await generateImage({
         prompt: fullPrompt,
         aspectRatio,
@@ -502,7 +730,6 @@ function ToolModal({ tool, onClose, onProjectCreated }) {
 
       if (result.images && result.images.length > 0) {
         setGeneratedImages(result.images);
-        // Auto-create project folder with generated image
         const project = createProjectFromGeneration(result.images, fullPrompt);
         onProjectCreated?.(project.id);
       } else {
@@ -516,7 +743,7 @@ function ToolModal({ tool, onClose, onProjectCreated }) {
   };
 
   const handleSaveDraft = () => {
-    if (!prompt.trim() && !uploadedImage) { onClose(); return; }
+    if (!prompt.trim() && !uploadedImage && !jewelryType) { onClose(); return; }
     const fullPrompt = buildPrompt();
     const project = createProjectFromGeneration(generatedImages, fullPrompt);
     onProjectCreated?.(project.id);
@@ -590,97 +817,138 @@ function ToolModal({ tool, onClose, onProjectCreated }) {
             </>
           )}
 
-          {/* ── Image-input AI tools (Sketch, Technical, Marketing) ── */}
-          {isImageTool && (
+          {/* ── Sketch to Jewelry / Technical to Image ── */}
+          {isJewelryTool && (
             <>
-              <Section label="Upload Reference Image">
+              <Section label={isSketchTool ? "Upload Sketch" : "Upload Technical Drawing"}>
                 <ImageDropZone
                   dragOver={dragOver} setDragOver={setDragOver} large
                   previewUrl={uploadedImage}
-                  onFile={(dataUrl, file) => { setUploadedImage(dataUrl); setUploadedFile(file); }}
-                  onClear={() => { setUploadedImage(null); setUploadedFile(null); }}
+                  onFile={(dataUrl, file) => {
+                    setUploadedImage(dataUrl);
+                    setUploadedFile(file);
+                    setImageAnalysis("");
+                    analyzeImage(dataUrl);
+                  }}
+                  onClear={() => { setUploadedImage(null); setUploadedFile(null); setImageAnalysis(""); }}
                 />
                 {!uploadedImage && (
                   <div style={{ fontFamily: SANS, fontSize: 11, color: C.light, marginTop: 8 }}>
-                    Upload a sketch or reference image to guide the AI generation
+                    {isSketchTool
+                      ? "Upload your hand sketch — AI will analyze the design and convert it to a photorealistic jewelry image"
+                      : "Upload your technical drawing — AI will analyze the specifications and render a precise photorealistic image"}
+                  </div>
+                )}
+                {isAnalyzing && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                    <div style={{ width: 14, height: 14, border: `2px solid ${C.border}`, borderTopColor: C.blue, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                    <span style={{ fontFamily: SANS, fontSize: 11, color: C.blue, letterSpacing: 1, textTransform: "uppercase" }}>Analyzing {isSketchTool ? "sketch" : "drawing"}...</span>
+                  </div>
+                )}
+                {imageAnalysis && !isAnalyzing && (
+                  <div style={{ marginTop: 10, padding: "10px 14px", background: C.blueBg, border: `1px solid ${C.blueBorder}`, borderRadius: RS }}>
+                    <div style={{ fontFamily: SANS, fontSize: 9, fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase", color: C.blue, marginBottom: 4 }}>
+                      AI Analysis
+                    </div>
+                    <div style={{ fontFamily: SANS, fontSize: 11.5, color: C.dark, lineHeight: 1.5 }}>{imageAnalysis}</div>
                   </div>
                 )}
               </Section>
-              <Section label="Generation Settings">
+
+              <Section label="Jewelry Details">
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "16px 32px" }}>
+                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
+                    <div style={labelStyle}>Jewelry Type</div>
+                    <select value={jewelryType} onChange={(e) => setJewelryType(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}>
+                      {JEWELRY_TYPES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
+                    <div style={labelStyle}>Metal</div>
+                    <select value={metal} onChange={(e) => setMetal(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}>
+                      {METAL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
+                    <div style={labelStyle}>Primary Gemstone</div>
+                    <input value={gemstone} onChange={(e) => setGemstone(e.target.value)}
+                      placeholder={isSketchTool ? "e.g. Round Diamond, Oval Emerald" : "e.g. 1.5ct Round Brilliant Diamond"}
+                      style={inputStyle}
+                      onFocus={(e) => (e.target.style.borderBottomColor = C.mid)}
+                      onBlur={(e) => (e.target.style.borderBottomColor = C.borderInput)} />
+                  </div>
+                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
+                    <div style={labelStyle}>Setting Type</div>
+                    <select value={settingType} onChange={(e) => setSettingType(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}>
+                      {SETTING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
+                    <div style={labelStyle}>Finish</div>
+                    <select value={finish} onChange={(e) => setFinish(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}>
+                      {FINISH_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
+                    <div style={labelStyle}>Design Style</div>
+                    <input value={style} onChange={(e) => setStyle(e.target.value)}
+                      placeholder={isSketchTool ? "e.g. Art Deco, Bohemian, Minimalist" : "e.g. Modern, Vintage, Architectural"}
+                      style={inputStyle}
+                      onFocus={(e) => (e.target.style.borderBottomColor = C.mid)}
+                      onBlur={(e) => (e.target.style.borderBottomColor = C.borderInput)} />
+                  </div>
+                </div>
+              </Section>
+
+              <Section label={isSketchTool ? "Describe Your Vision" : "Technical Description"}>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "20px 32px" }}>
                   <div style={{ flex: "1 1 100%", minWidth: "100%" }}>
-                    <div style={labelStyle}>Prompt / Description</div>
                     <textarea
                       rows={3}
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
-                      placeholder="Describe the jewelry piece you want to generate..."
+                      placeholder={isSketchTool
+                        ? "Describe the jewelry piece you envision — the overall feel, unique design elements, who it's for..."
+                        : "Describe precise specifications — dimensions, stone placement, band width, construction details..."}
                       style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }}
                       onFocus={(e) => (e.target.style.borderBottomColor = C.mid)}
                       onBlur={(e) => (e.target.style.borderBottomColor = C.borderInput)}
                     />
                   </div>
-                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
-                    <div style={labelStyle}>Style</div>
-                    <input
-                      value={style}
-                      onChange={(e) => setStyle(e.target.value)}
-                      placeholder="e.g. Art Deco, Minimalist, Vintage"
-                      style={inputStyle}
-                      onFocus={(e) => (e.target.style.borderBottomColor = C.mid)}
-                      onBlur={(e) => (e.target.style.borderBottomColor = C.borderInput)}
-                    />
-                  </div>
-                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
+                </div>
+              </Section>
+
+              <Section label="Photography Settings">
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "16px 32px" }}>
+                  <div style={{ flex: "1 1 calc(33% - 22px)", minWidth: 160 }}>
                     <div style={labelStyle}>Camera Angle</div>
-                    <select
-                      value={cameraAngle}
-                      onChange={(e) => setCameraAngle(e.target.value)}
-                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}
-                    >
+                    <select value={cameraAngle} onChange={(e) => setCameraAngle(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}>
                       {CAMERA_ANGLES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
-                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
-                    <div style={labelStyle}>Scene Style</div>
-                    <select
-                      value={sceneStyle}
-                      onChange={(e) => setSceneStyle(e.target.value)}
-                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}
-                    >
-                      {SCENE_STYLES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  </div>
-                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
+                  <div style={{ flex: "1 1 calc(33% - 22px)", minWidth: 160 }}>
                     <div style={labelStyle}>Lighting</div>
-                    <select
-                      value={lighting}
-                      onChange={(e) => setLighting(e.target.value)}
-                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}
-                    >
+                    <select value={lighting} onChange={(e) => setLighting(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}>
                       {LIGHTING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
-                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
+                  <div style={{ flex: "1 1 calc(33% - 22px)", minWidth: 160 }}>
                     <div style={labelStyle}>Background</div>
-                    <select
-                      value={background}
-                      onChange={(e) => setBackground(e.target.value)}
-                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}
-                    >
+                    <select value={background} onChange={(e) => setBackground(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}>
                       {BACKGROUND_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
-                  <div style={{ flex: "1 1 calc(25% - 16px)", minWidth: 120 }}>
+                  <div style={{ flex: "1 1 calc(33% - 22px)", minWidth: 120 }}>
                     <div style={labelStyle}>Aspect Ratio</div>
-                    <select
-                      value={aspectRatio}
-                      onChange={(e) => setAspectRatio(e.target.value)}
-                      style={{
-                        ...inputStyle, cursor: "pointer", appearance: "auto",
-                        borderBottom: `1px solid ${C.borderInput}`,
-                      }}
-                    >
+                    <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}>
                       <option value="1:1">1:1 (Square)</option>
                       <option value="4:3">4:3 (Product)</option>
                       <option value="3:4">3:4 (Portrait)</option>
@@ -688,16 +956,10 @@ function ToolModal({ tool, onClose, onProjectCreated }) {
                       <option value="9:16">9:16 (Tall)</option>
                     </select>
                   </div>
-                  <div style={{ flex: "1 1 calc(25% - 16px)", minWidth: 120 }}>
+                  <div style={{ flex: "1 1 calc(33% - 22px)", minWidth: 120 }}>
                     <div style={labelStyle}>Resolution</div>
-                    <select
-                      value={resolution}
-                      onChange={(e) => setResolution(e.target.value)}
-                      style={{
-                        ...inputStyle, cursor: "pointer", appearance: "auto",
-                        borderBottom: `1px solid ${C.borderInput}`,
-                      }}
-                    >
+                    <select value={resolution} onChange={(e) => setResolution(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}>
                       <option value="720p">720p (Fast)</option>
                       <option value="1080p">1080p (Default)</option>
                     </select>
@@ -759,6 +1021,107 @@ function ToolModal({ tool, onClose, onProjectCreated }) {
                           >
                             Open Full Size
                           </a>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Section>
+              )}
+            </>
+          )}
+
+          {/* ── Image to Marketing (keeps original simple UI) ── */}
+          {isMarketingTool && (
+            <>
+              <Section label="Upload Reference Image">
+                <ImageDropZone
+                  dragOver={dragOver} setDragOver={setDragOver} large
+                  previewUrl={uploadedImage}
+                  onFile={(dataUrl, file) => { setUploadedImage(dataUrl); setUploadedFile(file); }}
+                  onClear={() => { setUploadedImage(null); setUploadedFile(null); }}
+                />
+              </Section>
+              <Section label="Generation Settings">
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "20px 32px" }}>
+                  <div style={{ flex: "1 1 100%", minWidth: "100%" }}>
+                    <div style={labelStyle}>Prompt / Description</div>
+                    <textarea rows={3} value={prompt} onChange={(e) => setPrompt(e.target.value)}
+                      placeholder="Describe the marketing look you want..."
+                      style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }}
+                      onFocus={(e) => (e.target.style.borderBottomColor = C.mid)}
+                      onBlur={(e) => (e.target.style.borderBottomColor = C.borderInput)} />
+                  </div>
+                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
+                    <div style={labelStyle}>Style</div>
+                    <input value={style} onChange={(e) => setStyle(e.target.value)}
+                      placeholder="e.g. Editorial, Luxury Brand, Minimalist"
+                      style={inputStyle}
+                      onFocus={(e) => (e.target.style.borderBottomColor = C.mid)}
+                      onBlur={(e) => (e.target.style.borderBottomColor = C.borderInput)} />
+                  </div>
+                  <div style={{ flex: "1 1 calc(50% - 16px)", minWidth: 200 }}>
+                    <div style={labelStyle}>Camera Angle</div>
+                    <select value={cameraAngle} onChange={(e) => setCameraAngle(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}>
+                      {CAMERA_ANGLES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 calc(33% - 22px)", minWidth: 120 }}>
+                    <div style={labelStyle}>Lighting</div>
+                    <select value={lighting} onChange={(e) => setLighting(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}>
+                      {LIGHTING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 calc(33% - 22px)", minWidth: 120 }}>
+                    <div style={labelStyle}>Background</div>
+                    <select value={background} onChange={(e) => setBackground(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}>
+                      {BACKGROUND_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 calc(33% - 22px)", minWidth: 120 }}>
+                    <div style={labelStyle}>Aspect Ratio</div>
+                    <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}>
+                      <option value="1:1">1:1 (Square)</option>
+                      <option value="4:3">4:3 (Product)</option>
+                      <option value="16:9">16:9 (Wide)</option>
+                      <option value="9:16">9:16 (Tall)</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 calc(33% - 22px)", minWidth: 120 }}>
+                    <div style={labelStyle}>Resolution</div>
+                    <select value={resolution} onChange={(e) => setResolution(e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer", appearance: "auto", borderBottom: `1px solid ${C.borderInput}` }}>
+                      <option value="720p">720p (Fast)</option>
+                      <option value="1080p">1080p (Default)</option>
+                    </select>
+                  </div>
+                </div>
+              </Section>
+
+              {/* Generated image results */}
+              {(generatedImages.length > 0 || isGenerating || error) && (
+                <Section label="Generated Result">
+                  {isGenerating && (
+                    <div style={{ padding: "40px 0", textAlign: "center" }}>
+                      <div style={{ width: 32, height: 32, border: `3px solid ${C.border}`, borderTopColor: C.coral, borderRadius: "50%", margin: "0 auto 16px", animation: "spin 0.8s linear infinite" }} />
+                      <div style={{ fontFamily: SANS, fontSize: 12, color: C.mid, letterSpacing: 1.5, textTransform: "uppercase" }}>Generating...</div>
+                    </div>
+                  )}
+                  {error && (
+                    <div style={{ padding: "16px 20px", background: C.redBg, border: `1px solid ${C.redBorder}`, borderRadius: RS, marginBottom: 12 }}>
+                      <div style={{ fontFamily: SANS, fontSize: 12, color: C.coral, fontWeight: 600, marginBottom: 4 }}>Generation Failed</div>
+                      <div style={{ fontFamily: SANS, fontSize: 12, color: C.mid }}>{error}</div>
+                    </div>
+                  )}
+                  {generatedImages.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                      {generatedImages.map((img, i) => (
+                        <div key={i} style={{ position: "relative", flex: "1 1 auto", maxWidth: "100%" }}>
+                          <img src={img.url} alt={`Generated ${i + 1}`} style={{ width: "100%", borderRadius: RS, border: `1px solid ${C.border}`, display: "block" }} />
+                          <a href={img.url} target="_blank" rel="noopener noreferrer" style={{ position: "absolute", bottom: 10, right: 10, fontFamily: SANS, fontSize: 10, fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase", padding: "6px 14px", background: "rgba(30,30,28,0.75)", color: C.white, borderRadius: RS, textDecoration: "none", backdropFilter: "blur(4px)" }}>Open Full Size</a>
                         </div>
                       ))}
                     </div>
@@ -833,8 +1196,8 @@ function ToolModal({ tool, onClose, onProjectCreated }) {
           {/* Actions */}
           <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
             {(() => {
-              const canGenerate = isImageTool && (prompt.trim() || uploadedImage);
-              const isDisabled = isImageTool ? (isGenerating || !canGenerate) : false;
+              const canGenerate = isImageTool && (prompt.trim() || uploadedImage || jewelryType);
+              const isDisabled = isImageTool ? (isGenerating || isAnalyzing || !canGenerate) : false;
               return (
                 <button
                   onClick={isImageTool ? handleGenerate : undefined}
@@ -850,7 +1213,7 @@ function ToolModal({ tool, onClose, onProjectCreated }) {
                   onMouseEnter={(e) => { if (!isDisabled) e.currentTarget.style.background = C.coralHover; }}
                   onMouseLeave={(e) => { if (!isDisabled) e.currentTarget.style.background = C.coral; }}
                 >
-                  {isGenerating ? "Generating..." : actionLabel}
+                  {isAnalyzing ? "Analyzing image..." : isGenerating ? "Generating..." : actionLabel}
                 </button>
               );
             })()}
