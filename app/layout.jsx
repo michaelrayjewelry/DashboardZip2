@@ -1,4 +1,5 @@
 import "./globals.css";
+import Script from "next/script";
 
 export const metadata = {
   title: "ZipJeweler — Dashboard",
@@ -10,10 +11,10 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body>
         {children}
-        <script
-          type="module"
+        <Script
           src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"
-          async
+          type="module"
+          strategy="lazyOnload"
         />
       </body>
     </html>
