@@ -360,11 +360,11 @@ function buildDefaultBom(f) {
   const metalName = f.metal || "Yellow Gold";
   const karat = f.metalKarat || "14k";
   const rows = [
-    { id: "metal", category: "material", name: metalName, spec: `${karat} (${KARAT_PURITY[karat] || karat})`, qty: parseFloat(f.weight) || 0, unit: "grams", unitCost: 52 },
-    { id: "casting", category: "labor", name: "Casting", spec: "Lost wax, single", qty: 1, unit: "piece", unitCost: 85 },
-    { id: "labor-cad", category: "labor", name: "Labor \u2013 CAD", spec: "Custom design", qty: 4, unit: "hours", unitCost: 65 },
-    { id: "labor-setting", category: "labor", name: "Labor \u2013 Setting", spec: f.settingType || "", qty: 0, unit: "hours", unitCost: 55 },
-    { id: "labor-finishing", category: "labor", name: "Labor \u2013 Finishing", spec: "Polish, QC", qty: 2, unit: "hours", unitCost: 45 },
+    { id: "metal", category: "material", name: metalName, spec: `${karat} (${KARAT_PURITY[karat] || karat})`, qty: parseFloat(f.weight) || 0, unit: "grams", unitCost: parseFloat(f.metalUnitCost) || 0 },
+    { id: "casting", category: "labor", name: "Casting", spec: f.castingMethod || "", qty: 0, unit: "piece", unitCost: 0 },
+    { id: "labor-cad", category: "labor", name: "Labor \u2013 CAD", spec: "", qty: 0, unit: "hours", unitCost: 0 },
+    { id: "labor-setting", category: "labor", name: "Labor \u2013 Setting", spec: f.settingType || "", qty: 0, unit: "hours", unitCost: 0 },
+    { id: "labor-finishing", category: "labor", name: "Labor \u2013 Finishing", spec: "", qty: 0, unit: "hours", unitCost: 0 },
   ];
   if (f.mainGemstone) {
     rows.splice(1, 0, { id: "gemstone", category: "material", name: f.mainGemstone, spec: [f.gemstoneShape, f.gemstoneSize].filter(Boolean).join(", "), qty: parseFloat(f.numberOfStones) || 1, unit: "stones", unitCost: 0 });
@@ -506,7 +506,7 @@ export default function ProjectView({ onBack, projectId }) {
   });
   const [metalMarket, setMetalMarket] = useState(() => {
     const stored = storedProject?.fields?.metalMarket;
-    return stored || { goldSpot: 2870, perGram14k: 52 };
+    return stored || { goldSpot: 0, perGram14k: 0 };
   });
   const [markup, setMarkup] = useState(() => {
     return parseFloat(storedProject?.fields?.markup) || 45;
@@ -798,13 +798,13 @@ export default function ProjectView({ onBack, projectId }) {
     fields: storedProject.fields || {},
     readiness: storedProject.readiness || 0,
   } : {
-    name: "Crown of Thorns Ring",
-    collection: "Mythos Line",
-    stage: "cad",
-    status: "in-progress",
-    created: "Feb 23, 2026",
-    updated: "Mar 3, 2026",
-    client: { email: "augm3ntllc@gmail.com", name: "Lord Augm3nt", phone: "—", created: "Feb 23, 2026, 12:36 PM" },
+    name: "Untitled Project",
+    collection: "",
+    stage: "concept",
+    status: "draft",
+    created: "—",
+    updated: "—",
+    client: { email: "—", name: "—", phone: "—", created: "—" },
     fields: {},
     readiness: 0,
   };
@@ -1300,10 +1300,17 @@ export default function ProjectView({ onBack, projectId }) {
         {/* ════════════════════════════════════════ */}
         {activeTab === "manufacturing" && (
           <>
-            <Section label="CAD Files" count={(filesByCategory.cad || []).length || 3} rightAction={<SmallBtn label="+ Upload CAD" onClick={() => triggerUpload("cad")} />}>
-              <FileCard name="crown-thorns-v3.step" type="cad" size="4.2 MB" date="Mar 3, 2026" status="Current" />
-              <FileCard name="crown-thorns-v2.step" type="cad" size="3.8 MB" date="Feb 28, 2026" />
-              <FileCard name="crown-thorns-v1.step" type="cad" size="3.1 MB" date="Feb 25, 2026" />
+            <Section label="CAD Files" count={(filesByCategory.cad || []).length} rightAction={<SmallBtn label="+ Upload CAD" onClick={() => triggerUpload("cad")} />}>
+              {(filesByCategory.cad || []).length > 0 ? (
+                (filesByCategory.cad || []).map((f) => (
+                  <FileCard key={f.id} name={f.name} type="cad" size={formatSize(f.size)} date={new Date(f.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} url={getFileUrl(f)} />
+                ))
+              ) : (
+                <div style={{ padding: "24px 0", textAlign: "center" }}>
+                  <div style={{ fontFamily: SANS, fontSize: 12, color: C.light }}>No CAD files yet</div>
+                  <div style={{ fontFamily: SANS, fontSize: 11, color: C.light, marginTop: 4 }}>Upload .step, .stp, or .stl files</div>
+                </div>
+              )}
             </Section>
 
             <Section label="3D Models" count={(storedProject?.models3d || []).length + ((filesByCategory.model3d || []).length || 0)} rightAction={
@@ -1360,24 +1367,26 @@ export default function ProjectView({ onBack, projectId }) {
                 </div>
               ))}
               {(storedProject?.models3d || []).length === 0 && !is3dGenerating && (
-                <>
-                  <FileCard name="crown-thorns-render.stl" type="model" size="12.6 MB" date="Mar 2, 2026" status="Current" />
-                  <FileCard name="crown-thorns-print.stl" type="model" size="8.4 MB" date="Mar 1, 2026" />
-                </>
+                <div style={{ padding: "24px 0", textAlign: "center" }}>
+                  <div style={{ fontFamily: SANS, fontSize: 12, color: C.light }}>No 3D models yet</div>
+                  <div style={{ fontFamily: SANS, fontSize: 11, color: C.light, marginTop: 4 }}>
+                    {storedGeneratedImages.length > 0 ? 'Use "Generate 3D" to create a model from your designs' : "Generate a design image first, then convert it to 3D"}
+                  </div>
+                </div>
               )}
             </Section>
 
             <Section label="Production Notes">
-              <Field label="Casting Method" value="Lost Wax" />
+              <Field label="Casting Method" value={project.fields.castingMethod || ""} onChange={(v) => saveField("castingMethod", v)} />
               <div style={{ height: 12 }} />
-              <Field label="Production Notes" value="Thorn tips need extra attention during finishing — fragile points. Double-check wall thickness on inner band before casting. Client prefers slightly matte finish on thorn surfaces only." wide textarea />
+              <Field label="Production Notes" value={project.fields.productionNotes || ""} onChange={(v) => saveField("productionNotes", v)} wide textarea />
             </Section>
 
             <Section label="Quality Checklist" collapsed={collapseState.qa} onToggle={() => toggle("qa")}>
-              {["CAD approved by client", "Wall thickness verified (min 1.5mm)", "Casting tree positioned", "Cast piece inspected", "Thorn details intact post-cast", "Polish grade confirmed", "Final QC passed", "Photographed for records"].map((item, i) => (
+              {["CAD approved by client", "Wall thickness verified", "Casting tree positioned", "Cast piece inspected", "Details intact post-cast", "Polish grade confirmed", "Final QC passed", "Photographed for records"].map((item, i) => (
                 <label key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", cursor: "pointer", borderBottom: i < 7 ? `1px solid ${C.border}` : "none" }}>
-                  <input type="checkbox" defaultChecked={i < 3} style={{ accentColor: C.green, width: 14, height: 14 }} />
-                  <span style={{ fontFamily: SANS, fontSize: 13, color: i < 3 ? C.mid : C.dark }}>{item}</span>
+                  <input type="checkbox" defaultChecked={false} style={{ accentColor: C.green, width: 14, height: 14 }} />
+                  <span style={{ fontFamily: SANS, fontSize: 13, color: C.dark }}>{item}</span>
                 </label>
               ))}
             </Section>
@@ -1399,9 +1408,9 @@ export default function ProjectView({ onBack, projectId }) {
 
             <Section label="CAD Designer Thread" style={{ padding: 0 }}>
               <div style={{ padding: "20px 24px", maxHeight: 400, overflowY: "auto" }}>
-                <ChatBubble from="Alex (CAD)" message="Here's the v3 file with the adjusted band width. Thorn detail is tighter now — let me know if you want more separation between the points." time="Mar 3, 10:22 AM" />
-                <ChatBubble message="Looks great. Can we make the inner band slightly more rounded for comfort? Also the two thorns on the left side seem thicker than the right." time="Mar 3, 10:45 AM" isMe />
-                <ChatBubble from="Alex (CAD)" message="Good catch on the symmetry — I'll fix that in v4. Comfort fit inner band is easy, will have it to you by EOD." time="Mar 3, 11:02 AM" />
+                <div style={{ padding: "24px 0", textAlign: "center" }}>
+                  <div style={{ fontFamily: SANS, fontSize: 12, color: C.light }}>No messages yet</div>
+                </div>
               </div>
               <div style={{ padding: "14px 24px", borderTop: `1px solid ${C.border}`, display: "flex", gap: 10 }}>
                 <input placeholder="Type a message…" style={{
@@ -1412,22 +1421,15 @@ export default function ProjectView({ onBack, projectId }) {
               </div>
             </Section>
 
-            <Section label="Client Messages" collapsed={collapseState.clientChat} onToggle={() => toggle("clientChat")} count={3}>
-              <ChatBubble from="Lord Augm3nt" message="I want it to look like an actual crown of thorns wrapped around the finger. Not cartoonish — realistic, organic thorns." time="Feb 23, 12:40 PM" />
-              <ChatBubble message="Understood — going for a sculptural, organic feel. I'll have some AI concepts for you to review within the hour." time="Feb 23, 12:55 PM" isMe />
-              <ChatBubble from="Lord Augm3nt" message="Perfect. Size 10, 14k yellow gold. No stones." time="Feb 23, 1:02 PM" />
+            <Section label="Client Messages" collapsed={collapseState.clientChat} onToggle={() => toggle("clientChat")} count={0}>
+              <div style={{ padding: "24px 0", textAlign: "center" }}>
+                <div style={{ fontFamily: SANS, fontSize: 12, color: C.light }}>No client messages yet</div>
+              </div>
             </Section>
 
-            <Section label="Internal Notes" collapsed={collapseState.notes} onToggle={() => toggle("notes")} count={2}>
-              <div style={{ fontFamily: SANS, fontSize: 13, color: C.dark, lineHeight: 1.7 }}>
-                <div style={{ padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
-                  <span style={{ fontFamily: MONO, fontSize: 10, color: C.light }}>Mar 1 — </span>
-                  Client is particular about thorn realism. Show at least 4 concept variations before proceeding to CAD. May want to do a wax try-on.
-                </div>
-                <div style={{ padding: "8px 0" }}>
-                  <span style={{ fontFamily: MONO, fontSize: 10, color: C.light }}>Feb 24 — </span>
-                  Gold market is volatile this week. Lock in price at casting order, not before.
-                </div>
+            <Section label="Internal Notes" collapsed={collapseState.notes} onToggle={() => toggle("notes")} count={0}>
+              <div style={{ padding: "24px 0", textAlign: "center" }}>
+                <div style={{ fontFamily: SANS, fontSize: 12, color: C.light }}>No internal notes yet</div>
               </div>
             </Section>
           </>
@@ -1438,20 +1440,35 @@ export default function ProjectView({ onBack, projectId }) {
         {/* ════════════════════════════════════════ */}
         {activeTab === "documents" && (
           <>
-            <Section label="Invoices & Quotes" count={2} rightAction={<SmallBtn label="+ New Invoice" onClick={() => void 0} />}>
-              <FileCard name="Quote-CrownThorns-001.pdf" type="pdf" size="124 KB" date="Feb 24, 2026" status="Current" />
-              <FileCard name="Deposit-Invoice-001.pdf" type="pdf" size="98 KB" date="Feb 25, 2026" />
+            <Section label="Invoices & Quotes" count={(filesByCategory.document || []).filter((f) => /invoice|quote/i.test(f.name)).length} rightAction={<SmallBtn label="+ New Invoice" onClick={() => void 0} />}>
+              {(filesByCategory.document || []).filter((f) => /invoice|quote/i.test(f.name)).length > 0 ? (
+                (filesByCategory.document || []).filter((f) => /invoice|quote/i.test(f.name)).map((f) => (
+                  <FileCard key={f.id} name={f.name} type="pdf" size={formatSize(f.size)} date={new Date(f.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} url={getFileUrl(f)} />
+                ))
+              ) : (
+                <div style={{ padding: "24px 0", textAlign: "center" }}>
+                  <div style={{ fontFamily: SANS, fontSize: 12, color: C.light }}>No invoices or quotes yet</div>
+                </div>
+              )}
             </Section>
 
-            <Section label="Certificates & Grading" count={0} rightAction={<SmallBtn label="+ Upload" onClick={() => void 0} />}>
+            <Section label="Certificates & Grading" count={(filesByCategory.certificate || []).length} rightAction={<SmallBtn label="+ Upload" onClick={() => void 0} />}>
+              {(filesByCategory.certificate || []).length > 0 ? (
+                (filesByCategory.certificate || []).map((f) => (
+                  <FileCard key={f.id} name={f.name} type="cert" size={formatSize(f.size)} date={new Date(f.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} url={getFileUrl(f)} />
+                ))
+              ) : (
+                <div style={{ padding: "24px 0", textAlign: "center" }}>
+                  <div style={{ fontFamily: SANS, fontSize: 12, color: C.light, marginBottom: 4 }}>No certificates uploaded</div>
+                  <div style={{ fontFamily: SANS, fontSize: 11, color: C.light }}>Upload stone grading reports, metal assay certs, or appraisals</div>
+                </div>
+              )}
+            </Section>
+
+            <Section label="Client Agreements" count={0} rightAction={<SmallBtn label="+ Upload" onClick={() => void 0} />}>
               <div style={{ padding: "24px 0", textAlign: "center" }}>
-                <div style={{ fontFamily: SANS, fontSize: 12, color: C.light, marginBottom: 4 }}>No certificates uploaded</div>
-                <div style={{ fontFamily: SANS, fontSize: 11, color: C.light }}>Upload stone grading reports, metal assay certs, or appraisals</div>
+                <div style={{ fontFamily: SANS, fontSize: 12, color: C.light }}>No agreements uploaded</div>
               </div>
-            </Section>
-
-            <Section label="Client Agreements" count={1} rightAction={<SmallBtn label="+ Upload" onClick={() => void 0} />}>
-              <FileCard name="Custom-Order-Agreement.pdf" type="doc" size="210 KB" date="Feb 23, 2026" />
             </Section>
 
             <Section label="Shipping & Insurance" count={0} collapsed={collapseState.shipping} onToggle={() => toggle("shipping")}>
@@ -1463,7 +1480,7 @@ export default function ProjectView({ onBack, projectId }) {
               </div>
             </Section>
 
-            <Section label="All Project Files" count={projectFiles.length || 8} rightAction={<SmallBtn label="+ Upload" onClick={() => triggerUpload("other")} />}>
+            <Section label="All Project Files" count={projectFiles.length} rightAction={<SmallBtn label="+ Upload" onClick={() => triggerUpload("other")} />}>
               {projectFiles.length > 0 ? (
                 projectFiles.map((f) => (
                   <FileCard
@@ -1476,16 +1493,10 @@ export default function ProjectView({ onBack, projectId }) {
                   />
                 ))
               ) : (
-                <>
-                  <FileCard name="crown-thorns-v3.step" type="cad" size="4.2 MB" date="Mar 3" />
-                  <FileCard name="crown-thorns-render.stl" type="model" size="12.6 MB" date="Mar 2" />
-                  <FileCard name="render-front-v2.png" type="image" size="2.1 MB" date="Mar 1" />
-                  <FileCard name="render-side-v2.png" type="image" size="1.8 MB" date="Mar 1" />
-                  <FileCard name="concept-ai-001.png" type="image" size="890 KB" date="Feb 23" />
-                  <FileCard name="Quote-CrownThorns-001.pdf" type="pdf" size="124 KB" date="Feb 24" />
-                  <FileCard name="Custom-Order-Agreement.pdf" type="doc" size="210 KB" date="Feb 23" />
-                  <FileCard name="client-reference-photo.jpg" type="image" size="1.4 MB" date="Feb 23" />
-                </>
+                <div style={{ padding: "24px 0", textAlign: "center" }}>
+                  <div style={{ fontFamily: SANS, fontSize: 12, color: C.light }}>No files yet</div>
+                  <div style={{ fontFamily: SANS, fontSize: 11, color: C.light, marginTop: 4 }}>Upload files or generate content with AI tools to populate this section</div>
+                </div>
               )}
             </Section>
           </>
@@ -1496,19 +1507,20 @@ export default function ProjectView({ onBack, projectId }) {
         {/* ════════════════════════════════════════ */}
         {activeTab === "timeline" && (
           <Section label="Full Project Timeline">
-            <TimelineItem icon="📐" title="CAD file uploaded — v3" detail="crown-thorns-v3.step uploaded by Alex (CAD designer)" time="Mar 3, 10:22 AM" accent={C.blue} />
-            <TimelineItem icon="💬" title="Designer message" detail="Band width adjusted to 6mm, comfort fit inner band" time="Mar 3, 10:22 AM" accent={C.purple} />
-            <TimelineItem icon="🖼" title="Render generated" detail="Photorealistic front view render — studio lighting" time="Mar 2, 4:15 PM" accent={C.green} />
-            <TimelineItem icon="📐" title="CAD file uploaded — v2" detail="crown-thorns-v2.step — thorn detail refined" time="Feb 28, 2:30 PM" accent={C.blue} />
-            <TimelineItem icon="✏️" title="Specifications updated" detail="Metal karat changed: 18k → 14k per client request" time="Feb 27, 11:00 AM" accent={C.amber} />
-            <TimelineItem icon="📐" title="CAD file uploaded — v1" detail="crown-thorns-v1.step — initial model from sketches" time="Feb 25, 9:00 AM" accent={C.blue} />
-            <TimelineItem icon="💰" title="Deposit invoice sent" detail="Deposit-Invoice-001.pdf sent to client" time="Feb 25, 8:30 AM" accent={C.coral} />
-            <TimelineItem icon="📄" title="Quote sent to client" detail="Quote-CrownThorns-001.pdf — $1,249 estimated total" time="Feb 24, 3:00 PM" accent={C.coral} />
-            <TimelineItem icon="🤖" title="AI concepts generated" detail="4 variations generated from initial prompt" time="Feb 23, 1:30 PM" accent={C.green} />
-            <TimelineItem icon="📝" title="Specifications captured" detail="Ring, size 10, 14k yellow gold, no stones, sculptural thorn motif" time="Feb 23, 12:50 PM" accent={C.amber} />
-            <TimelineItem icon="💬" title="Client conversation" detail="Initial requirements discussed via chat" time="Feb 23, 12:40 PM" accent={C.purple} />
-            <TimelineItem icon="📸" title="Reference image uploaded" detail="client-reference-photo.jpg — crown of thorns inspiration" time="Feb 23, 12:36 PM" accent={C.green} />
-            <TimelineItem icon="🆕" title="Project created" detail="Crown of Thorns Ring — Mythos Line" time="Feb 23, 12:36 PM" accent={C.black} />
+            {/* Generated images timeline entries */}
+            {storedGeneratedImages.map((img, i) => (
+              <TimelineItem key={"img-" + i} icon="🖼" title="AI design generated" detail={img.promptUsed ? `"${img.promptUsed.slice(0, 80)}${img.promptUsed.length > 80 ? "…" : ""}"` : `Image generated via ${img.source || "AI"}`} time={new Date(img.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} accent={C.green} />
+            ))}
+            {/* 3D model timeline entries */}
+            {(storedProject?.models3d || []).map((m, i) => (
+              <TimelineItem key={"3d-" + i} icon="🧊" title="3D model generated" detail="Meshy AI Image-to-3D" time={new Date(m.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} accent={C.purple} />
+            ))}
+            {/* File upload timeline entries */}
+            {projectFiles.map((f) => (
+              <TimelineItem key={"file-" + f.id} icon="📎" title={`File added — ${f.name}`} detail={formatSize(f.size)} time={new Date(f.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} accent={C.blue} />
+            ))}
+            {/* Project created entry */}
+            <TimelineItem icon="🆕" title="Project created" detail={project.name} time={project.created} accent={C.black} />
           </Section>
         )}
 

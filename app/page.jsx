@@ -42,26 +42,6 @@ const AI_TOOLS = [
   { id: "file-hub", title: "File & Document Hub", sub: "Central file and document management", actionLabel: "Upload Files", emoji: "🗂️" },
 ];
 
-const PROJECTS = [
-  { id: 1, name: "Celestial Halo Ring", collection: "Astral Collection", status: "in-progress", stage: "3D Modeling", time: "2h ago" },
-  { id: 2, name: "Serpentine Cuff", collection: "Mythos Line", status: "review", stage: "Client Approval", time: "1d ago" },
-  { id: 3, name: "Art Deco Pendant", collection: "Heritage Revival", status: "complete", stage: "Production Ready", time: "3d ago" },
-  { id: 4, name: "Organic Vine Earrings", collection: "Astral Collection", status: "draft", stage: "Concept", time: "5d ago" },
-];
-
-const COLLECTIONS = [
-  { name: "Astral Collection", count: 8 },
-  { name: "Mythos Line", count: 5 },
-  { name: "Heritage Revival", count: 12 },
-  { name: "Summer '26 Bridal", count: 3 },
-];
-
-const STATS = [
-  { label: "Active Projects", value: "4" },
-  { label: "Pieces Created", value: "27" },
-  { label: "AI Generations", value: "143" },
-  { label: "Avg. Turnaround", value: "4.2d" },
-];
 
 // ─── Sidebar Nav Item ───
 function SideNav({ label, active, onClick, icon }) {
@@ -1322,24 +1302,10 @@ function ToolModal({ tool, onClose, onProjectCreated }) {
                 <ImageDropZone dragOver={dragOver} setDragOver={setDragOver} large />
               </Section>
               <Section label="Recent Files">
-                {[
-                  { name: "crown-thorns-v3.step", type: "CAD", size: "4.2 MB", date: "Mar 3, 2026" },
-                  { name: "Quote-CrownThorns-001.pdf", type: "PDF", size: "124 KB", date: "Feb 24, 2026" },
-                  { name: "render-front-v2.png", type: "IMG", size: "2.1 MB", date: "Mar 1, 2026" },
-                  { name: "Custom-Order-Agreement.pdf", type: "DOC", size: "210 KB", date: "Feb 23, 2026" },
-                ].map((f) => (
-                  <div key={f.name} style={{
-                    display: "flex", alignItems: "center", gap: 14, padding: "10px 0",
-                    borderBottom: `1px solid ${C.border}`, cursor: "pointer",
-                  }}>
-                    <span style={{ fontFamily: MONO, fontSize: 9, fontWeight: 600, color: C.blue, letterSpacing: 1,
-                      padding: "4px 8px", background: C.blueBg, borderRadius: RS, border: `1px solid ${C.blueBorder}` }}>{f.type}</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontFamily: SANS, fontSize: 12.5, fontWeight: 500, color: C.dark }}>{f.name}</div>
-                      <div style={{ fontFamily: MONO, fontSize: 10, color: C.light, marginTop: 1 }}>{f.size} · {f.date}</div>
-                    </div>
-                  </div>
-                ))}
+                <div style={{ padding: "24px 0", textAlign: "center" }}>
+                  <div style={{ fontFamily: SANS, fontSize: 12, color: C.light }}>No files yet</div>
+                  <div style={{ fontFamily: SANS, fontSize: 11, color: C.light, marginTop: 4 }}>Upload files above to get started</div>
+                </div>
               </Section>
             </>
           )}
@@ -1693,15 +1659,23 @@ function DashboardContent({ onNavigate, onOpenTool, storedProjects = [] }) {
               onClick={() => onNavigate("project-detail", p.id)}
             />
           ))}
-          {PROJECTS.map((p) => (
-            <ProjectRow key={p.id} project={p} onClick={() => onNavigate("project-detail")} />
-          ))}
+          {storedProjects.length === 0 && (
+            <div style={{ padding: "24px 0", textAlign: "center" }}>
+              <div style={{ fontFamily: SANS, fontSize: 12, color: C.light }}>No projects yet</div>
+              <div style={{ fontFamily: SANS, fontSize: 11, color: C.light, marginTop: 4 }}>Create your first project to get started</div>
+            </div>
+          )}
         </Section>
 
         {/* Overview Stats */}
         <Section label="Overview" style={{ padding: "24px 28px 28px" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
-            {STATS.map((stat, i) => (
+            {[
+              { label: "Active Projects", value: String(storedProjects.filter((p) => p.status !== "complete").length) },
+              { label: "Completed", value: String(storedProjects.filter((p) => p.status === "complete").length) },
+              { label: "AI Generations", value: String(storedProjects.reduce((sum, p) => sum + (p.generatedImages?.length || 0), 0)) },
+              { label: "3D Models", value: String(storedProjects.reduce((sum, p) => sum + (p.models3d?.length || 0), 0)) },
+            ].map((stat, i) => (
               <div
                 key={i}
                 style={{
@@ -1866,12 +1840,22 @@ export default function ZipJewelerDashboard() {
           >
             Collections
           </div>
-          {COLLECTIONS.map((c) => (
-            <div key={c.name} style={{ display: "flex", alignItems: "center", padding: "7px 0", cursor: "pointer" }}>
-              <span style={{ fontFamily: SANS, fontSize: 12, color: C.sidebarText, flex: 1 }}>{c.name}</span>
-              <span style={{ fontFamily: MONO, fontSize: 10, color: "rgba(168,168,156,0.35)" }}>{c.count}</span>
-            </div>
-          ))}
+          {(() => {
+            const collectionMap = {};
+            storedProjects.forEach((p) => {
+              const col = p.fields?.collection || p.type || "";
+              if (col) collectionMap[col] = (collectionMap[col] || 0) + 1;
+            });
+            const collections = Object.entries(collectionMap).map(([name, count]) => ({ name, count }));
+            return collections.length > 0 ? collections.map((c) => (
+              <div key={c.name} style={{ display: "flex", alignItems: "center", padding: "7px 0", cursor: "pointer" }}>
+                <span style={{ fontFamily: SANS, fontSize: 12, color: C.sidebarText, flex: 1 }}>{c.name}</span>
+                <span style={{ fontFamily: MONO, fontSize: 10, color: "rgba(168,168,156,0.35)" }}>{c.count}</span>
+              </div>
+            )) : (
+              <div style={{ fontFamily: SANS, fontSize: 11, color: "rgba(168,168,156,0.35)", padding: "7px 0" }}>No collections yet</div>
+            );
+          })()}
           <button
             style={{
               fontFamily: SANS,
