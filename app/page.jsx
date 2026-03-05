@@ -27,19 +27,19 @@ function timeAgo(dateStr) {
 
 // ─── Mock Data ───
 const PRIMARY_ACTIONS = [
-  { id: "new-project", title: "New Project", sub: "Create a new custom jewelry project", actionLabel: "Create Project" },
-  { id: "imagine", title: "Imagine", sub: "AI-powered concept generation", action: "navigate" },
-  { id: "start-collection", title: "Start a Collection", sub: "Group products into a collection", actionLabel: "Create Collection" },
-  { id: "create-order", title: "Create an Order", sub: "Start a new customer order", action: "navigate" },
+  { id: "new-project", title: "New Project", sub: "Create a new custom jewelry project", actionLabel: "Create Project", emoji: "💎" },
+  { id: "imagine", title: "Imagine", sub: "AI-powered concept generation", action: "navigate", emoji: "✨" },
+  { id: "start-collection", title: "Start a Collection", sub: "Group products into a collection", actionLabel: "Create Collection", emoji: "📂" },
+  { id: "create-order", title: "Create an Order", sub: "Start a new customer order", action: "navigate", emoji: "🛒" },
 ];
 
 const AI_TOOLS = [
-  { id: "sketch-to-jewelry", title: "Sketch to Jewelry", sub: "Convert hand sketches to jewelry designs", actionLabel: "Generate Design" },
-  { id: "technical-to-image", title: "Technical to Image", sub: "Convert technical drawings to realistic images", actionLabel: "Generate Image" },
-  { id: "image-to-marketing", title: "Image to Marketing", sub: "Transform product photos into marketing materials", actionLabel: "Generate Marketing" },
-  { id: "manufacture-estimate", title: "Manufacture Estimate", sub: "AI-powered manufacturing cost estimates", actionLabel: "Get Estimate" },
-  { id: "3d-model", title: "3D Model Generation", sub: "Generate 3D models from designs", actionLabel: "Generate 3D Model" },
-  { id: "file-hub", title: "File & Document Hub", sub: "Central file and document management", actionLabel: "Upload Files" },
+  { id: "sketch-to-jewelry", title: "Sketch to Jewelry", sub: "Convert hand sketches to jewelry designs", actionLabel: "Generate Design", emoji: "✏️" },
+  { id: "technical-to-image", title: "Technical to Image", sub: "Convert technical drawings to realistic images", actionLabel: "Generate Image", emoji: "📐" },
+  { id: "image-to-marketing", title: "Image to Marketing", sub: "Transform product photos into marketing materials", actionLabel: "Generate Marketing", emoji: "📸" },
+  { id: "manufacture-estimate", title: "Manufacture Estimate", sub: "AI-powered manufacturing cost estimates", actionLabel: "Get Estimate", emoji: "🧮" },
+  { id: "3d-model", title: "3D Model Generation", sub: "Generate 3D models from designs", actionLabel: "Generate 3D Model", emoji: "🧊" },
+  { id: "file-hub", title: "File & Document Hub", sub: "Central file and document management", actionLabel: "Upload Files", emoji: "🗂️" },
 ];
 
 const PROJECTS = [
@@ -165,7 +165,7 @@ function StatusBadge({ status }) {
 }
 
 // ─── Tool Card (2x2 grid) ───
-function ToolCard({ title, sub, onClick }) {
+function ToolCard({ title, sub, onClick, emoji }) {
   const [h, setH] = useState(false);
   return (
     <button
@@ -185,6 +185,7 @@ function ToolCard({ title, sub, onClick }) {
         boxShadow: h ? "0 2px 16px rgba(0,0,0,0.04)" : "none",
       }}
     >
+      {emoji && <div style={{ fontSize: 28, marginBottom: 12 }}>{emoji}</div>}
       <div
         style={{
           fontFamily: SERIF,
@@ -205,7 +206,7 @@ function ToolCard({ title, sub, onClick }) {
 }
 
 // ─── Primary Action Card (large, prominent) ───
-function PrimaryActionCard({ title, sub, onClick, isNavigate }) {
+function PrimaryActionCard({ title, sub, onClick, isNavigate, emoji }) {
   const [h, setH] = useState(false);
   return (
     <button
@@ -225,6 +226,7 @@ function PrimaryActionCard({ title, sub, onClick, isNavigate }) {
         position: "relative",
       }}
     >
+      {emoji && <div style={{ fontSize: 32, marginBottom: 14 }}>{emoji}</div>}
       <div
         style={{
           fontFamily: SERIF,
@@ -1470,6 +1472,7 @@ function DashboardContent({ onNavigate, onOpenTool, storedProjects = [] }) {
                 key={a.id}
                 title={a.title}
                 sub={a.sub}
+                emoji={a.emoji}
                 isNavigate={a.action === "navigate"}
                 onClick={() => {
                   if (a.id === "imagine") onNavigate("imagine");
@@ -1489,6 +1492,7 @@ function DashboardContent({ onNavigate, onOpenTool, storedProjects = [] }) {
                 key={t.id}
                 title={t.title}
                 sub={t.sub}
+                emoji={t.emoji}
                 onClick={() => onOpenTool(t)}
               />
             ))}
